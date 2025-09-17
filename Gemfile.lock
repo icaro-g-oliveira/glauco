@@ -1,0 +1,34 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    ast (2.4.3)
+    builder (3.3.0)
+    markaby (0.9.4)
+      builder
+    opal (1.8.2)
+      ast (>= 2.3.0)
+      parser (~> 3.0, >= 3.0.3.2)
+    parser (3.3.9.0)
+      ast (~> 2.4.1)
+      racc
+    phlex (2.3.1)
+      zeitwerk (~> 2.7)
+    racc (1.8.1)
+    rack (3.2.1)
+    shoes (3.0.1)
+    snabberb (1.5.4)
+      opal (>= 1.1)
+    zeitwerk (2.7.3)
+
+PLATFORMS
+  x64-mingw-ucrt
+
+DEPENDENCIES
+  markaby (~> 0.9.4)
+  phlex (~> 2.3)
+  rack (~> 3.2)
+  shoes (~> 3.0)
+  snabberb (~> 1.5)
+
+BUNDLED WITH
+   2.7.2
