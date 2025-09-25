@@ -60,7 +60,6 @@ module LMSLLM
       tool_params = params
 
       
-    # Armazena metadados para gerar JS
       tools << {
         name: tool_name,
         docstring: docstring,
@@ -84,8 +83,6 @@ module LMSLLM
       start_node_process
       start_reader_thread
     end
-
-
 
     # Envia prompt para Node (se precisar)
     def act(prompt)
@@ -125,7 +122,6 @@ module LMSLLM
       # Retorna a última mensagem do assistente
       final_message
     end
-
 
     private
     def sanitize_prompt(prompt)
@@ -222,11 +218,15 @@ module LMSLLM
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
         const client = new LMStudioClient();
         const model = await client.llm.model("#{MODEL_IDENTIFIER}");
-
         
         #{js_tools_code}
         // Indica ao Ruby que Node está pronto
         console.log(JSON.stringify({ type: "node_ready" }));
+
+        /* criar variaveis de contexto:
+           - Base de contexto estruturados com cabeçalho, salvo e observado via file
+           - Flag de parecer de contexto: string curta gerada por ele exposta nos status bar
+        */
 
         rl.on("line", async (line) => {
           try {
@@ -238,6 +238,28 @@ module LMSLLM
                 }
               });
               console.log(JSON.stringify({ type: "act_response", result }));
+            }
+            if (cmd.type === "diretrize") {
+              /*
+              | Comando dividido em duas partes:
+              | 1. Json de estado que ele deve gerenciar
+              | 2. Texto de instrução do que fazer com o estado
+              */
+            }
+            if (cmd.type === "contextualize") {
+              /*
+                | Adicionar "janelas de contexto": conteúdo em blocos referente
+                | a um tópico específico, que o modelo deve usar para atuar
+                | em seguida:
+                | - mandar mensagem de contexto para o modelo
+                |   pedindo a ele confirmação dos fatos e salvando a resposta
+                |   em um local file de acesso pelo front-end
+                const response = await model.prompt(cmd.text);
+              */
+            }
+            if (cmd.type === "talk") {
+              const response = await model.chat(cmd.messages);
+              console.log(JSON.stringify({ type: "talk_response", response: response.toString() }));
             }
           } catch(e) {
             console.error(JSON.stringify({ type: "act_error", error: `${e.message}: ${line}` }));
