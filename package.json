@@ -1,0 +1,24 @@
+{
+  "name": "rubyfullstack-experiment",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/icaro-g-oliveira/glauco.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/icaro-g-oliveira/glauco/issues"
+  },
+  "homepage": "https://github.com/icaro-g-oliveira/glauco#readme",
+  "description": "",
+  "dependencies": {
+    "@lmstudio/sdk": "^1.5.0",
+    "zod": "^3.25.76"
+  }
+}
