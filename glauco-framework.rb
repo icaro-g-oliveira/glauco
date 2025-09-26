@@ -227,39 +227,52 @@ module LMSLLM
            - Base de contexto estruturados com cabeçalho, salvo e observado via file
            - Flag de parecer de contexto: string curta gerada por ele exposta nos status bar
         */
+        let op_ready = false;
+        const context_blocks_file = "./context_blocks.md";
+        let context_summary = "";
 
         rl.on("line", async (line) => {
           try {
             const cmd = JSON.parse(line);
-            if (cmd.type === "act") {
-              const result = await model.act(cmd.prompt, [#{tools.map { |t| t[:name] }.join(", ")}], {
-                onMessage: (msg) => {
-                  console.log(JSON.stringify({ type: "act_message", message: msg.toString() }));
-                }
-              });
-              console.log(JSON.stringify({ type: "act_response", result }));
-            }
-            if (cmd.type === "diretrize") {
-              /*
-              | Comando dividido em duas partes:
-              | 1. Json de estado que ele deve gerenciar
-              | 2. Texto de instrução do que fazer com o estado
-              */
-            }
-            if (cmd.type === "contextualize") {
-              /*
-                | Adicionar "janelas de contexto": conteúdo em blocos referente
-                | a um tópico específico, que o modelo deve usar para atuar
-                | em seguida:
-                | - mandar mensagem de contexto para o modelo
-                |   pedindo a ele confirmação dos fatos e salvando a resposta
-                |   em um local file de acesso pelo front-end
-                const response = await model.prompt(cmd.text);
-              */
-            }
-            if (cmd.type === "talk") {
-              const response = await model.chat(cmd.messages);
-              console.log(JSON.stringify({ type: "talk_response", response: response.toString() }));
+            switch (cmd.type) {
+              case "act": {
+                const result = await model.act(cmd.prompt, [#{tools.map { |t| t[:name] }.join(", ")}], {
+                  onMessage: (msg) => {
+                    console.log(JSON.stringify({ type: "act_message", message: msg.toString() }));
+                  }
+                });
+                console.log(JSON.stringify({ type: "act_response", result }));
+              }
+              case "apprehend_state": {
+                /*
+                | Comando dividido em duas partes:
+                | 1. Json de estado que ele deve gerenciar
+                | 2. Texto de instrução do que fazer com o estado
+                | Retorna uma descrição breve de status da função que ele entendeu
+                */
+              }
+              case "take_order": {
+                /*
+                  | Recebe um pedido de ação do usuário, a interpreta segundo o
+                  | estado atual e as instruções de funções do estado, e
+                  | retorna um novo estado atualizado.
+                */
+              }
+              case "contextualize": {
+                /*
+                  | Adiciona uma "janela de contexto": conteúdo em blocos referente
+                  | a um tópico específico, que o modelo deve usar na compreensão
+                  | do que está sendo tratado.
+                  | - Recebe um conteúdo estruturado (markdown)
+                  | - Retorna confirmação dos fatos detalhados
+                  |   em um arquivo local com acesso pelo front-end
+                  const response = await model.prompt(cmd.text);
+                */
+              }
+              case "talk": {
+                const response = await model.chat(cmd.payload.messages);
+                console.log(JSON.stringify({ type: "talk_response", response: response.toString() }));
+              }
             }
           } catch(e) {
             console.error(JSON.stringify({ type: "act_error", error: `${e.message}: ${line}` }));
