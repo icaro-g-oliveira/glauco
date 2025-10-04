@@ -1,4 +1,5 @@
 
+require_relative 'LMSLLM_integration'
 require_relative 'glauco-framework'
 
 include Frontend
@@ -20,8 +21,47 @@ class Counter < Component
     end
   end
 end
+class ParentChildNestedTest < Component
+  def initialize(parent_renderer:)
+    super(parent_renderer: parent_renderer)
 
+    # Estado principal com objeto aninhado
+    @state = {
+      form_type: "A",       # Tipo de formulário (pai)
+      form_data: {          # Objeto aninhado para dados do form
+        child_value: "A"    # Valor interno (filho)
+      }
+    }
+    define_render do
+      # Pai: bind sobre objeto aninhado
+      # --- Bind do formulário pai ---
+      bind(:form_type, div(style: "padding:10px; border:1px solid green; width:400px;")) do |form_type|
+        div("Form type: #{form_type}", style: "font-weight:bold; margin-bottom:10px;") +
 
+        # Botões para mudar o tipo de formulário (pai)
+        button(onclick: proc { set_state(:form_type, "A") }) { "Form A" } +
+        button(onclick: proc { set_state(:form_type, "B") }) { "Form B" } +
+
+        # Bind interno para child_value
+        bind(:form_data>:child_value, div(style: "margin-top:10px; padding:5px; border:1px solid blue;")) do |child_value|
+          div("Child value: #{child_value}", style: "margin-bottom:5px;") +
+
+          select(
+            onchange: proc { |payload|
+              set_state(:form_data>:child_value, payload[0].to_s)
+            }
+          ) do
+            %w[A B C].map do |val|
+              attrs = {}
+              attrs[:selected] = "selected" if child_value == val
+              option(val, **attrs)
+            end.join
+          end
+        end
+      end
+    end
+  end
+end
 class ChatPage < Component
   def initialize(parent_renderer:)
     super(parent_renderer: parent_renderer)
@@ -96,7 +136,8 @@ class ChatPage < Component
               # Executa LLM fora do observer
               
               async do
-                ia_response = LMSLLM.act(input_value.to_s).to_s
+                ia_response = LMSLLM.talk(input_value.to_s).to_s
+                puts "LLM response: #{ia_response}"
                 # adiciona resposta da IA
                 new_messages = @state[:messages] + [{ role: "ia", text: ia_response }]
                 set_state(:messages, new_messages)
@@ -113,70 +154,177 @@ class ChatPage < Component
   end
 end
 
-class ParentChildNestedTest < Component
+class AppPage < Component
   def initialize(parent_renderer:)
     super(parent_renderer: parent_renderer)
 
-    # Estado principal com objeto aninhado
     @state = {
-      form_type: "A",       # Tipo de formulário (pai)
-      form_data: {          # Objeto aninhado para dados do form
-        child_value: "A"    # Valor interno (filho)
-      }
+      current_page: "Chat",
+      links: [
+        { name: "Home", href: "#" },
+        { name: "Chat", href: "#" },
+        { name: "Settings", href: "#" },
+        { name: "Logout", href: "#" },
+      ]
     }
+
     define_render do
-      # Pai: bind sobre objeto aninhado
-      # --- Bind do formulário pai ---
-      bind(:form_type, div(style: "padding:10px; border:1px solid green; width:400px;")) do |form_type|
-        div("Form type: #{form_type}", style: "font-weight:bold; margin-bottom:10px;") +
-
-        # Botões para mudar o tipo de formulário (pai)
-        button(onclick: proc { set_state(:form_type, "A") }) { "Form A" } +
-        button(onclick: proc { set_state(:form_type, "B") }) { "Form B" } +
-
-        # Bind interno para child_value
-        bind(:form_data>:child_value, div(style: "margin-top:10px; padding:5px; border:1px solid blue;")) do |child_value|
-          div("Child value: #{child_value}", style: "margin-bottom:5px;") +
-
-          select(
-            onchange: proc { |payload|
-              set_state(:form_data>:child_value, payload[0].to_s)
+      script(src: "https://cdn.tailwindcss.com") +
+      style do
+        <<~CSS 
+          @layer base {
+            :root {
+              --sidebar: oklch(0.985 0 0);
+              --sidebar-foreground: oklch(0.145 0 0);
+              --sidebar-primary: oklch(0.205 0 0);
+              --sidebar-primary-foreground: oklch(0.985 0 0);
+              --sidebar-accent: oklch(0.97 0 0);
+              --sidebar-accent-foreground: oklch(0.205 0 0);
+              --sidebar-border: oklch(0.922 0 0);
+              --sidebar-ring: oklch(0.708 0 0);
             }
-          ) do
-            %w[A B C].map do |val|
-              attrs = {}
-              attrs[:selected] = "selected" if child_value == val
-              option(val, **attrs)
-            end.join
+
+            .dark {
+              --sidebar: oklch(0.205 0 0);
+              --sidebar-foreground: oklch(0.985 0 0);
+              --sidebar-primary: oklch(0.488 0.243 264.376);
+              --sidebar-primary-foreground: oklch(0.985 0 0);
+              --sidebar-accent: oklch(0.269 0 0);
+              --sidebar-accent-foreground: oklch(0.985 0 0);
+              --sidebar-border: oklch(1 0 0 / 10%);
+              --sidebar-ring: oklch(0.439 0 0);
+            }
+          }
+        CSS
+      end+
+      main(class: "flex h-screen w-screen bg-sidebar text-sidebar-foreground") do
+        bind(:links, nav(class: "flex flex-col w-48 border-r border-sidebar-border bg-sidebar p-4")) do |links|
+          links.map do |link|
+            a(href: link[:href], class: "mb-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-sidebar-accent hover:text-sidebar-accent-foreground #{'bg-sidebar-primary text-sidebar-primary-foreground' if link[:name] == @state[:current_page]}",
+              onclick: proc {
+                set_state(:current_page, link[:name])
+              }
+            ) do
+              link[:name]
+            end
+          end
+        end+
+        main(class: "flex flex-1 flex-col") do
+          bind(:current_page, div(class: "flex-1")) do |current_page|
+            case current_page
+            when "Chat"
+              ChatPage.new(parent_renderer: self)
+            when "Home"
+              div("Welcome to the Home Page", class: "p-4")
+            when "Settings"
+            when "Logout"
+              div("You have been logged out.", class: "p-4")
+            else
+              div("Page not found", class: "p-4")
+            end
           end
         end
       end
     end
+      
   end
 end
 
-# LLM init
+class ChatPage < Component
 
-LMSLLM.register_tool(
-  name: :say_hello,
-  docstring: "Cumprimenta alguém pelo nome.",
-  params: { name: "string" }
-) do |args|
-  nome = args["name"]
-  msg = "👋 Olá, #{nome}!"
-  puts msg # aqui vai aparecer no console Ruby
-  msg      # devolve também a string para o Node/LLM
+  class Message < Component
+    def initialize(parent_renderer:, role:, text:, avatar: nil)
+      super(parent_renderer: parent_renderer)
+
+      define_render do
+        role_class = role.to_s == "user" ? "is-user" : "is-assistant flex-row-reverse justify-end"
+
+        div(class: "group flex w-full items-end gap-2 py-4 [&>div]:max-w-[80%] #{role_class}") do
+          [
+            MessageAvatar.new(parent_renderer: self, role: role, avatar: avatar),
+            MessageContent.new(parent_renderer: self, text: text, role: role)
+          ]
+        end
+      end
+      
+    end
+  end
+
+  class MessageAvatar < Component
+    def initialize(parent_renderer:, role:, avatar: nil)
+      super(parent_renderer: parent_renderer)
+      @role = role
+      @avatar = avatar
+      puts "MessageAvatar initialized with role=#{@role}, avatar=#{@avatar}"
+    end
+
+    # sobrescreve o render_to_html
+    def render_to_html
+      div(class: "w-8 h-8 rounded-full ring ring-1 ring-border flex items-center justify-center overflow-hidden") do
+        if @avatar
+          img(src: @avatar, alt: @role, class: "w-full h-full object-cover mt-0 mb-0")
+        else
+          span(class: "text-xs text-gray-500") { @role[0].upcase }
+        end
+      end
+    end
+  end
+
+  class MessageContent < Component
+    def initialize(parent_renderer:, text:, role:)
+      super(parent_renderer: parent_renderer)
+      @text = text
+      @role = role
+
+      define_render do
+        div(
+          class: [
+            "flex flex-col gap-2 overflow-hidden rounded-lg px-4 py-3 text-foreground text-sm",
+            (@role == "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground")
+          ].join(" ")
+        ) do
+          div { @text }
+        end
+      end
+    end
+  end
+
+  def initialize(parent_renderer:)
+    super(parent_renderer: parent_renderer)
+    @state = {
+      messages: [
+        { role: "user", text: "Olá, tudo bem?", avatar: "https://i.pravatar.cc/40?u=user1" },
+        { role: "ia", text: "Oi! Tudo ótimo, e você?", avatar: "https://i.pravatar.cc/40?u=assistant" },
+      ]
+    }
+
+    define_render do
+   
+      div(id: "message-box", class: "p-4") do
+        bind(:messages, div(class: "flex flex-col gap-2 flex-1 overflow-auto p-2")) do |messages|
+          messages.map do |msg|
+            Message.new(
+              parent_renderer: self,
+              role: msg[:role],
+              text: msg[:text],
+              avatar: msg[:avatar]
+            )
+          end
+        end+
+        textarea(placeholder: "Type your message here...", class:  "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 flex field-sizing-content min-h-16 w-full rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm") 
+      end
+    end
+  end
+
 end
 
 
 
 
 # App rendering
-counter = Counter.new(parent_renderer: $root)
-chat = ChatPage.new(parent_renderer: $root)
-nested = ParentChildNestedTest.new(parent_renderer: $root)
+app = AppPage.new(parent_renderer: $root)
 
-$root.root_component = nested
+$root.root_component = app
 
 $root.render
 
@@ -184,4 +332,4 @@ $root.render
 $shell.setSize(900, 700)
 $shell.open
 
-LMSLLM.init_llm!
+# LMSLLM.init_llm!

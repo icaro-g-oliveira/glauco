@@ -1,7 +1,6 @@
 require 'java'
 require './jarlibs/swt.jar'
 
-# SWT imports
 java_import 'org.eclipse.swt.widgets.Display'
 java_import 'org.eclipse.swt.widgets.Shell'
 java_import 'org.eclipse.swt.layout.FillLayout'
@@ -18,329 +17,6 @@ require 'json'
 require 'fileutils'
 require 'open3'
 require 'securerandom'
-
-require "observer"
-
-
-MODEL_ROOT_FOLDER = "vendor"
-MODEL_OPTIONS = [
-  {
-    file: File.join(MODEL_ROOT_FOLDER, "gemma-3n-E4B-it-Q4_K_M.gguf"),
-    identifier: "gemma3n",
-  }
-]
-
-
-module LMSLLM
-  NODE_PATH = "vendor/nodejs/node.exe"
-  NODE_SCRIPT_PATH = "./lmstudio_node_script.js"
-
-  LMS_EXE_PATH = File.join(ENV['USERPROFILE'] || ENV['HOME'], ".lmstudio", "bin", "lms.exe")
-  LMSTUDIO_EXE = "vendor\\LM Studio\\LM Studio.exe"
-  MODEL_PATH = MODEL_OPTIONS[0][:file]
-  MODEL_IDENTIFIER = MODEL_OPTIONS[0][:identifier]
-  SERVER_PORT = "1234"
-
-  class << self
-
-    
-    @tools = []
-    @node_process = nil
-    @reader_thread = nil
-
-    @node_ready = false
-    @node_ready_mutex = Mutex.new
-    @node_ready_cond = ConditionVariable.new
-
-    def tools
-      @tools ||= []
-    end
-    def register_tool(name:, docstring:, params:, &impl)
-      tool_name = name.to_s
-      tool_params = params
-
-      
-      tools << {
-        name: tool_name,
-        docstring: docstring,
-        params: tool_params
-      }
-
-      self.singleton_class.send(:define_method, "#{tool_name}_impl") do |args, impl_block = impl|
-        tool_params.each_key do |k|
-          raise ArgumentError, "Missing argument: #{k}" unless args.key?(k.to_s)
-        end
-        impl_block.call(args)
-      end
-    end
-
-
-    def init_llm!
-      @node_ready_mutex ||= Mutex.new
-      @node_ready_cond ||= ConditionVariable.new
-      prepare_lmstudio
-      generate_node_script
-      start_node_process
-      start_reader_thread
-    end
-
-    # Envia prompt para Node (se precisar)
-    def act(prompt)
-      puts 'chegou '+prompt
-      raise "Node process not started" unless @stdin
-      sanitized_prompt = sanitize_prompt(prompt)
-      final_message = nil
-      call_id = SecureRandom.uuid
-
-      mutex = Mutex.new
-      cond  = ConditionVariable.new
-
-      # Listener temporário
-      handler = Proc.new do |msg|
-        if msg['type'] == 'act_message'
-          # Podemos filtrar apenas mensagens do assistente
-          final_message = msg['message']
-        elsif msg['type'] == 'act_response'
-          # Node sinaliza que o act terminou
-          mutex.synchronize { cond.signal }
-        end
-      end
-
-      @temp_handlers ||= []
-      @temp_handlers << handler
-
-      cmd = { type: "act", prompt: sanitized_prompt, call_id: call_id }
-      puts "[Ruby DEBUG] Sending ACT command to Node: #{cmd}"
-      @stdin.puts(cmd.to_json)
-      @stdin.flush
-
-      # Espera Node finalizar
-      mutex.synchronize { cond.wait(mutex) }
-
-      @temp_handlers.delete(handler)
-
-      # Retorna a última mensagem do assistente
-      final_message
-    end
-
-    private
-    def sanitize_prompt(prompt)
-      # garante UTF-8 válido
-      prompt = prompt.encode('UTF-8', invalid: :replace, undef: :replace, replace: '?')
-      # opcional: remove ou substitui caracteres de controle que podem quebrar JSON
-      prompt.gsub(/[\u0000-\u001F]/, '')
-    end
-
-    # Fecha Node
-    public
-    def stop!
-      if @node_process
-        begin
-          @node_process.puts({ type: "shutdown" }.to_json) # opcional, se você implementar shutdown no Node
-          @node_process.flush
-        rescue IOError
-          # ignora erros se o processo já morreu
-        end
-      end
-
-      @reader_thread&.join
-      @stdin&.close
-      @stdout_and_stderr&.close
-      @wait_thr&.kill
-    end
-
-    private
-    # Checa e inicializa LM Studio, importa e carrega modelo
-    def prepare_lmstudio
-      unless File.exist?(LMS_EXE_PATH)
-        puts "Starting LM Studio headless..."
-        system("#{LMSTUDIO_EXE} --headless")
-      end
-
-      puts "Importing model..."
-      system("#{LMS_EXE_PATH} import #{MODEL_PATH} -y --hard-link")
-      puts "Loading model..."
-      system("#{LMS_EXE_PATH} load #{MODEL_IDENTIFIER} -y --identifier #{MODEL_IDENTIFIER}")
-      puts "Starting LM Studio server..."
-      spawn(LMS_EXE_PATH, "server", "start", "--port", SERVER_PORT, out: $stdout, err: $stderr)
-      sleep 3 # aguarda servidor iniciar
-    end
-
-    private
-    # Cria script Node.js com bind das funções Ruby
-    def generate_node_script
-      puts "generate_node_script"
-      FileUtils.mkdir_p(File.dirname(NODE_SCRIPT_PATH))
-      puts NODE_SCRIPT_PATH
-
-      puts tools
-      
-      js_tools_code = tools.map do |t|
-          params_schema = t[:params].map { |k,v| "#{k}: z.#{v}()" }.join(", ")
-
-          <<~JS
-            const #{t[:name]} = tool({
-              name: "#{t[:name]}",
-              description: "#{t[:docstring]}",
-              parameters: { #{params_schema} },
-              implementation: async ({ #{t[:params].keys.join(", ")} }) => {
-                const callId = crypto.randomUUID();
-                process.stdout.write(JSON.stringify({
-                  type: "tool_call",
-                  tool: "#{t[:name]}",
-                  args: { #{t[:params].keys.join(", ")} },
-                  call_id: callId
-                }) + "\\n");
-
-                return new Promise(resolve => {
-                  const listener = (data) => {
-                    try {
-                      const msg = JSON.parse(data.toString());
-                      if (msg.type === "tool_response" && msg.call_id === callId) {
-                        resolve(msg.result);
-                        process.stdin.off("data", listener); // remove listener após resposta
-                      }
-                    } catch(e) {}
-                  };
-                  process.stdin.on("data", listener);
-                });
-              }
-            });
-          JS
-      end.join("\n")
-      
-      node_script = <<~JS
-        import { LMStudioClient, tool } from "@lmstudio/sdk";
-        import { z } from "zod";
-        import crypto from "crypto";
-        import readline from "readline";
-
-        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-        const client = new LMStudioClient();
-        const model = await client.llm.model("#{MODEL_IDENTIFIER}");
-        
-        #{js_tools_code}
-        // Indica ao Ruby que Node está pronto
-        console.log(JSON.stringify({ type: "node_ready" }));
-
-        /* criar variaveis de contexto:
-           - Base de contexto estruturados com cabeçalho, salvo e observado via file
-           - Flag de parecer de contexto: string curta gerada por ele exposta nos status bar
-        */
-        let op_ready = false;
-        const context_blocks_file = "./context_blocks.md";
-        let context_summary = "";
-
-        rl.on("line", async (line) => {
-          try {
-            const cmd = JSON.parse(line);
-            switch (cmd.type) {
-              case "act": {
-                const result = await model.act(cmd.prompt, [#{tools.map { |t| t[:name] }.join(", ")}], {
-                  onMessage: (msg) => {
-                    console.log(JSON.stringify({ type: "act_message", message: msg.toString() }));
-                  }
-                });
-                console.log(JSON.stringify({ type: "act_response", result }));
-              }
-              case "apprehend_state": {
-                /*
-                | Comando dividido em duas partes:
-                | 1. Json de estado que ele deve gerenciar
-                | 2. Texto de instrução do que fazer com o estado
-                | Retorna uma descrição breve de status da função que ele entendeu
-                */
-              }
-              case "take_order": {
-                /*
-                  | Recebe um pedido de ação do usuário, a interpreta segundo o
-                  | estado atual e as instruções de funções do estado, e
-                  | retorna um novo estado atualizado.
-                */
-              }
-              case "contextualize": {
-                /*
-                  | Adiciona uma "janela de contexto": conteúdo em blocos referente
-                  | a um tópico específico, que o modelo deve usar na compreensão
-                  | do que está sendo tratado.
-                  | - Recebe um conteúdo estruturado (markdown)
-                  | - Retorna confirmação dos fatos detalhados
-                  |   em um arquivo local com acesso pelo front-end
-                  const response = await model.prompt(cmd.text);
-                */
-              }
-              case "talk": {
-                const response = await model.chat(cmd.payload.messages);
-                console.log(JSON.stringify({ type: "talk_response", response: response.toString() }));
-              }
-            }
-          } catch(e) {
-            console.error(JSON.stringify({ type: "act_error", error: `${e.message}: ${line}` }));
-          }
-        });
-      JS
-      puts "written"
-      File.write(NODE_SCRIPT_PATH, node_script)
-    end
-
-    private
-    def start_node_process
-      @stdin, @stdout_and_stderr, @wait_thr = Open3.popen2e(LMSLLM::NODE_PATH, LMSLLM::NODE_SCRIPT_PATH)
-      puts "Node started, PID: #{@wait_thr.pid}"
-    end
-
-    
-    # Thread para ler respostas Node → Ruby
-    private
-    def start_reader_thread
-      @reader_thread = Thread.new do
-        loop do
-          line = @stdout_and_stderr.gets
-          break if line.nil?
-
-          begin
-            msg = JSON.parse(line.chomp)
-            @temp_handlers&.each { |h| h.call(msg) }
-
-            case msg['type']
-            when 'tool_call'
-              tool_name = msg['tool']
-              args = msg['args']
-              call_id = msg['call_id']
-              puts "[Ruby DEBUG] Tool call received: #{tool_name} with args: #{args}"
-              result = send("#{tool_name}_impl", args)
-              response = { type: 'tool_response', call_id: call_id, result: result }
-              @stdin.puts(response.to_json)
-              @stdin.flush
-            when 'act_message'
-              puts "[Ruby DEBUG] LLM message: #{msg['message']}"
-            when "act_response"
-              puts "[Ruby DEBUG] ACT finished: #{msg["result"].inspect}"
-              @node_ready_mutex.synchronize do
-                @pending_act_result = msg["result"]
-                @pending_act_cond&.signal
-              end
-            when 'act_error'
-              puts "[Ruby DEBUG] ACT error from Node: #{msg['error']}"
-            when 'node_ready'
-              puts "[Ruby DEBUG] Node ready handshake received"
-              @node_ready_mutex.synchronize do
-                @node_ready = true
-                @node_ready_cond.signal
-              end
-            else
-              puts "[Ruby DEBUG] Unknown JSON from Node: #{msg}"
-            end
-          rescue JSON::ParserError
-            puts "[Ruby DEBUG] Non-JSON output from Node: #{line}"
-          rescue StandardError => e
-            puts "[Ruby DEBUG] Tool execution error: #{e.message}"
-          end
-        end
-      end
-    end
-  end
-end
 
 module Frontend
   $callbacks = {}
@@ -406,8 +82,6 @@ module Frontend
   end
 
   private
-
-
   public
   class Component
     attr_accessor :state, :children, :parent_renderer, :attrs
@@ -493,7 +167,17 @@ module Frontend
 
       begin
         puts "current value for #{path_str}: #{value.inspect}"
-        inner_html = Array(block.call(value)).join
+        result = block.call(value)
+
+        inner_html =
+          case result
+          when Array
+            result.map { |r| r.is_a?(Component) ? r.render_to_html : r.to_s }.join
+          when Component
+            result.render_to_html
+          else
+            result.to_s
+          end
       rescue => e
         puts "⚠️ Erro ao executar binding para #{path_str}: #{e.class} - #{e.message}"
         inner_html = ""
@@ -506,7 +190,6 @@ module Frontend
       node
     end
 
-    # --- Navegação de paths complexos ---
     def dig_state_path(state_path)
       puts "dig_state_path called with #{state_path}"
       parts = state_path.to_s.scan(/([^\[\]]+)/).flatten
@@ -531,7 +214,6 @@ module Frontend
             nil
           end
         else
-          # obj não é Array nem Hash, não dá pra descer mais
           nil
         end
       end
@@ -579,7 +261,9 @@ module Frontend
             inner_html =
               case result
               when Array
-                result.map(&:to_s).join
+                result.map { |r| r.is_a?(Component) ? r.render_to_html : r.to_s }.join
+              when Component
+                result.render_to_html
               else
                 result.to_s
               end
@@ -610,6 +294,7 @@ module Frontend
     public
     def add_child(comp)
       comp.parent_renderer = self.parent_renderer
+      puts "comp.inspect: #{comp.inspect}"
       @children << comp
     end
 
@@ -627,11 +312,17 @@ module Frontend
 
       inner_content = if block
         result = instance_eval(&block)
-        add_child(result) if result.is_a?(Component)
-        result.is_a?(Component) ? "" : result.to_s
-      else
-        content_or_attrs.is_a?(Component) ? (add_child(content_or_attrs); "") : content_or_attrs.to_s
 
+        # Normaliza para array
+        components = result.is_a?(Array) ? result : [result]
+
+        # Adiciona cada filho e renderiza
+        components.map do |c|
+          add_child(c) if c.is_a?(Component)
+          c.is_a?(Component) ? c.render_to_html : c.to_s
+        end.join
+      else
+        content_or_attrs.is_a?(Component ) ? content_or_attrs.render_to_html : content_or_attrs.to_s
       end
 
       html_attrs = attrs.map do |k, v|
@@ -658,16 +349,9 @@ module Frontend
 
     def render_to_html
       return "" unless @render_block
-      puts "render_to_html called : #{@render_block}"
-
-      content = instance_eval(&@render_block)
-      add_child(content) if content.is_a?(Component)
-
-      children_html = children.map(&:render_to_html).join
-      content_html = content.is_a?(Component) ? "" : content.to_s
-      puts "content_html: #{content_html}"
-      "<div>#{content_html}#{children_html}</div>"
+      instance_eval(&@render_block).to_s
     end
+
 
     def define_render(&block)
       @render_block = block
@@ -687,6 +371,9 @@ module Frontend
     end
   end
 
+  def +(other)
+    self.render_to_html + (other.is_a?(Component) ? other.render_to_html : other.to_s)
+  end
 end
 
 $display = Display.new
@@ -694,7 +381,6 @@ $shell = Shell.new($display)
 $shell.setLayout(FillLayout.new)
 $browser = Browser.new($shell, 0)
 $root = Frontend::RootRenderer.new($browser)
-
 
 def async(&block)
   $display.async_exec do
@@ -707,6 +393,5 @@ at_exit do
   while !$shell.disposed?
     $display.sleep unless $display.read_and_dispatch
   end
-  LMSLLM.stop!
   $display.dispose  
 end
