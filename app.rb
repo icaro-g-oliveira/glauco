@@ -318,7 +318,674 @@ class ChatPage < Component
 
 end
 
+class OfficeEscritorio < Component
+  def initialize(parent_renderer:)
+    super(parent_renderer: parent_renderer)
 
+    # Estado inicial com várias entidades{
+    @state = {
+      empresa: {
+        atual: {
+          id: nil,
+          nome: nil,
+          cnpj: nil,
+          descricao: nil,
+          cnaes: [],
+          endereco: nil,
+          telefone: nil,
+          email: nil
+        },
+        lista: []
+      },
+
+      fornecedores: {
+        atual: {
+          id: nil,
+          nome: nil,
+          descricao: nil,
+          cnpj: nil,
+          contatos: [],
+          catalogo_ids: [],
+          cotacoes_ids: [],
+          status: nil
+        },
+        lista: []
+      },
+
+      catalogos: {
+        atual: {
+          id: nil,
+          nome: nil,
+          fornecedor_id: nil,
+          itens: [],
+          data_criacao: nil,
+          status: nil
+        },
+        lista: []
+      },
+
+      editais: {
+        atual: {
+          id: nil,
+          titulo: nil,
+          descricao: nil,
+          data_abertura: nil,
+          data_fechamento: nil,
+          itens_ids: [],
+          fornecedores_ids: [],
+          pdf_link: nil,
+          status: nil,
+          pasta_documentos: nil
+        },
+        lista: []
+      },
+
+      itens: {
+        atual: {
+          id: nil,
+          edital_id: nil,
+          nome: nil,
+          descricao: nil,
+          quantidade: nil,
+          unidade: nil,
+          valor_estimado: nil,
+          cotacoes_ids: []
+        },
+        lista: []
+      },
+
+      atividades: {
+        atual: {
+          id: nil,
+          titulo: nil,
+          tipo_documento: nil,
+          documento_id: nil,
+          descricao: nil,
+          status: nil,
+          pipeline: [],
+          responsavel: nil
+        },
+        lista: []
+      },
+
+      documentos: {
+        atual: {
+          id: nil,
+          atividade_id: nil,
+          nome: nil,
+          tipo: nil,
+          data_criacao: nil,
+          status: nil,
+          assinaturas: [],
+          caminho: nil
+        },
+        lista: []
+      },
+
+      whatsapp: {
+        atual: {
+          contacts: [],
+          current_chat: nil,
+          messages: [],
+          input_text: ""
+        }
+      }
+
+    }
+
+    define_render do
+# --- Renderização principal (routing integrado) ---
+      define_render do
+        # Resolve rota corrente a partir da pilha de navegação
+        route = current_route
+        page_key = route[0].to_sym
+        sub_id   = route[1]
+
+        div(class: "app-container flex h-full") do
+          # Sidebar esquerda - navegação
+          div(class: "sidebar-left w-60 bg-gray-100 p-2") do
+            ul do
+              %i[dashboard empresa fornecedores editais catalogos atividades documentos whatsapp].map do |page|
+                li(class: (@state[:pages][:current_page] == page ? "active" : "")) do
+                  # navegação simples por página (reseta sub-seleção)
+                  a(href: "#", onclick: proc {
+                    # limpar a pilha quando navegar por item de topo
+                    set_state(StatePath.new(:navigation_history), [])
+                    set_state(StatePath.new(:pages)[:current_page], page)
+                    # limpa 'atual' da categoria ao trocar de página
+                    if @state[page] && @state[page].is_a?(Hash)
+                      set_state(StatePath.new(page)[:atual], nil)
+                    end
+                    rerender
+                  }) { page.to_s.capitalize }
+                end
+              end
+            end
+          end +
+
+          # Área central - renderiza lista ou detalhe com base na rota atual
+          div(class: "main-content flex-1 p-4 overflow-auto") do
+            case page_key
+            when :dashboard
+              render_dashboard
+            when :empresa
+              render_empresa_page
+            when :fornecedores
+              if sub_id
+                render_fornecedor_detail
+              else
+                render_fornecedores_list
+              end
+            when :catalogos
+              if sub_id
+                render_catalogo_detail
+              else
+                render_catalogos_list
+              end
+            when :editais
+              if sub_id
+                render_edital_detail
+              else
+                render_editais_list
+              end
+            when :itens
+              if sub_id
+                render_item_detail
+              else
+                render_itens_list
+              end
+            when :atividades
+              if sub_id
+                render_atividade_detail
+              else
+                render_atividades_list
+              end
+            when :documentos
+              if sub_id
+                render_documento_detail
+              else
+                render_documentos_list
+              end
+            when :whatsapp
+              render_whatsapp
+            else
+              div { "Página não encontrada" }
+            end
+          end +
+
+          # Sidebar direita - agente IA (sempre presente)
+          div(class: "sidebar-right w-80 bg-gray-50 p-2 border-l") do
+            ChatPage.new(parent_renderer: self)
+          end
+        end
+      end
+    end
+
+    # -----------------------
+    # --- Helper methods ---
+    # -----------------------
+    def push_history(*stack)
+      hist = (@state[:navigation_history] || []).dup
+      hist << stack
+      set_state(StatePath.new(:navigation_history), hist)
+    end
+
+    def pop_history
+      hist = (@state[:navigation_history] || []).dup
+      entry = hist.pop
+      set_state(StatePath.new(:navigation_history), hist)
+      entry
+    end
+
+    def current_route
+      hist = @state[:navigation_history] || []
+      if hist.any?
+        hist.last
+      else
+        [@state[:pages][:current_page]]
+      end
+    end
+
+    # resolve route: atualiza pages[current_page] e o objeto atual da categoria (se id presente)
+    def resolve_route(route)
+      page = route[0].to_sym
+      id   = route[1]
+      set_state(StatePath.new(:pages)[:current_page], page)
+      if id
+        found = find_in(page, id)
+        set_state(StatePath.new(page)[:atual], found || nil)
+      else
+        set_state(StatePath.new(page)[:atual], nil)
+      end
+    end
+
+    # navega empurrando para a pilha e resolvendo o novo estado
+    def navigate_to(page_sym, id = nil)
+      push_history(page_sym, id)
+      resolve_route([page_sym, id])
+      rerender
+    end
+
+    # localiza objeto na lista da categoria (por id)
+    def find_in(category_sym, id)
+      cat = @state[category_sym]
+      return nil unless cat && cat[:lista].is_a?(Array)
+      cat[:lista].find { |o| o[:id].to_s == id.to_s }
+    end
+
+    # -----------------------
+    # --- Render helpers ---
+    # -----------------------
+    def render_dashboard
+      div do
+        h2 { "Dashboard" } +
+        p { "Quadro de atividades, relatórios e status gerais." }
+      end
+    end
+
+    def render_empresa_page
+      div do
+        h2 { "Empresa" } +
+        bind(:empresa, '<div class="empresa-box">') do |empresa|
+          atual = empresa[:atual] || {}
+          <<~HTML
+            <p><b>Nome:</b> #{atual[:nome] || '-'}</p>
+            <p><b>CNPJ:</b> #{atual[:cnpj] || '-'}</p>
+            <p><b>Descrição:</b> #{atual[:descricao] || '-'}</p>
+            <p><b>CNAEs:</b> #{(atual[:cnaes] || []).join(", ")}</p>
+          HTML
+        end
+      end
+    end
+
+    # ---------- FORNECEDORES ----------
+    def render_fornecedores_list
+      div do
+        h2 { "Fornecedores" } +
+        bind(:fornecedores, '<div class="fornecedores-list">') do |fornecedores|
+          lista = (fornecedores[:lista] || [])
+          if lista.empty?
+            "<p>Nenhum fornecedor cadastrado.</p>"
+          else
+            lista.map do |f|
+              # usamos tag button com onclick: proc para permitir navegação via callbacks Ruby
+              "<div class='supplier-card border p-2 mb-2'>
+                #{button_html_open_fornecedor(f)}
+                <div class='meta'>CNPJ: #{f[:cnpj] || '-'}</div>
+              </div>"
+            end.join
+          end
+        end
+      end
+    end
+
+    def button_html_open_fornecedor(f)
+      # gera botão com onclick que chama navigate_to(:fornecedores, f[:id])
+      callback = proc {
+        navigate_to(:fornecedores, f[:id])
+      }
+      # use tag helper to ensure bind_callback wiring
+      button(class: "open-btn", onclick: callback) { "#{f[:nome] || '—'} (Abrir)" }
+    end
+
+    def render_fornecedor_detail
+      div do
+        h2 { "Fornecedor — Detalhes" } +
+        bind(:fornecedores, '<div class="fornecedor-detail">') do |fornecedores|
+          atual = fornecedores[:atual] || {}
+          if atual[:id].nil?
+            "<p>Nenhum fornecedor selecionado.</p>"
+          else
+            <<~HTML
+              <h3>#{atual[:nome]}</h3>
+              <p><b>CNPJ:</b> #{atual[:cnpj] || '-'}</p>
+              <p><b>Descrição:</b> #{atual[:descricao] || '-'}</p>
+              <p><b>Contatos:</b> #{(atual[:contatos] || []).map{|c| c[:nome]}.join(', ')}</p>
+              <p><b>Catálogo(s):</b> #{(atual[:catalogo_ids] || []).join(', ')}</p>
+              <div class='actions'>
+                #{button_edit_fornecedor(atual)}
+                #{button_back_to_list(:fornecedores)}
+              </div>
+            HTML
+          end
+        end
+      end
+    end
+
+    def button_edit_fornecedor(atual)
+      callback = proc {
+        # exemplo simples: abre o editor (aqui apenas marca como atual e re-render)
+        set_state(StatePath.new(:fornecedores)[:atual], atual)
+        rerender
+      }
+      button(class: "edit-btn", onclick: callback) { "Editar Fornecedor" }
+    end
+
+    def button_back_to_list(category)
+      callback = proc {
+        pop_history # remove o topo (detail)
+        # resolve novo topo
+        route = current_route
+        resolve_route(route)
+        rerender
+      }
+      button(class: "back-btn", onclick: callback) { "Voltar à Lista" }
+    end
+
+    # ---------- CATÁLOGOS ----------
+    def render_catalogos_list
+      div do
+        h2 { "Catálogos" } +
+        bind(:catalogos, '<div class="catalogos-list">') do |catalogos|
+          lista = (catalogos[:lista] || [])
+          if lista.empty?
+            "<p>Nenhum catálogo disponível.</p>"
+          else
+            lista.map do |c|
+              "<div class='catalog-card border p-2 mb-2'>
+                #{button_open_catalogo(c)}
+                <div class='meta'>Fornecedor ID: #{c[:fornecedor_id] || '-'}</div>
+              </div>"
+            end.join
+          end
+        end
+      end
+    end
+
+    def button_open_catalogo(c)
+      callback = proc { navigate_to(:catalogos, c[:id]) }
+      button(class: "open-catalog-btn", onclick: callback) { "#{c[:nome] || '—'} (Abrir Catálogo)" }
+    end
+
+    def render_catalogo_detail
+      div do
+        h2 { "Catálogo — Detalhes" } +
+        bind(:catalogos, '<div class="catalogo-detail">') do |catalogos|
+          atual = catalogos[:atual] || {}
+          if atual[:id].nil?
+            "<p>Nenhum catálogo selecionado.</p>"
+          else
+            items_html = (atual[:itens] || []).map { |it|
+              "<div class='item-line'>#{it[:nome]} — #{it[:descricao]} — R$ #{it[:preco]}</div>"
+            }.join
+            <<~HTML
+              <h3>#{atual[:nome]}</h3>
+              <p><b>Fornecedor:</b> #{atual[:fornecedor_id] || '-'}</p>
+              <div class='items'>#{items_html}</div>
+              <div class='actions'>#{button_back_to_list(:catalogos)}</div>
+            HTML
+          end
+        end
+      end
+    end
+
+    # ---------- EDITAIS ----------
+    def render_editais_list
+      div do
+        h2 { "Editais" } +
+        bind(:editais, '<div class="editais-list">') do |editais|
+          lista = (editais[:lista] || [])
+          if lista.empty?
+            "<p>Nenhum edital cadastrado.</p>"
+          else
+            lista.map do |e|
+              "<div class='edital-card border p-2 mb-2'>
+                #{button_open_edital(e)}
+                <div class='meta'>Abertura: #{e[:data_abertura] || '-'}</div>
+              </div>"
+            end.join
+          end
+        end
+      end
+    end
+
+    def button_open_edital(e)
+      callback = proc { navigate_to(:editais, e[:id]) }
+      button(class: "open-edital-btn", onclick: callback) { "#{e[:titulo] || '—'} (Abrir Edital)" }
+    end
+
+    def render_edital_detail
+      div do
+        h2 { "Edital — Detalhes" } +
+        bind(:editais, '<div class="edital-detail">') do |editais|
+          atual = editais[:atual] || {}
+          if atual[:id].nil?
+            "<p>Nenhum edital selecionado.</p>"
+          else
+            itens_list = (atual[:itens_ids] || []).map { |iid|
+              "<div class='edital-item'>Item ID: #{iid} — #{button_open_item_inline(iid)}</div>"
+            }.join
+            <<~HTML
+              <h3>#{atual[:titulo]}</h3>
+              <p>#{atual[:descricao]}</p>
+              <p><b>Período:</b> #{atual[:data_abertura]} → #{atual[:data_fechamento]}</p>
+              <p><b>PDF:</b> #{atual[:pdf_link] || '—'}</p>
+              <div class='itens'>#{itens_list}</div>
+              <div class='actions'>#{button_back_to_list(:editais)}</div>
+            HTML
+          end
+        end
+      end
+    end
+
+    def button_open_item_inline(item_id)
+      callback = proc { navigate_to(:itens, item_id) }
+      button(class: "open-item-btn", onclick: callback) { "Abrir Item" }
+    end
+
+    # ---------- ITENS ----------
+    def render_itens_list
+      div do
+        h2 { "Itens de Edital" } +
+        bind(:itens, '<div class="itens-list">') do |itens|
+          lista = (itens[:lista] || [])
+          if lista.empty?
+            "<p>Nenhum item cadastrado.</p>"
+          else
+            lista.map do |it|
+              "<div class='item-card border p-2 mb-2'>
+                #{button_open_item(it)}
+                <div class='meta'>Quantidade: #{it[:quantidade] || '-'}</div>
+              </div>"
+            end.join
+          end
+        end
+      end
+    end
+
+    def button_open_item(it)
+      callback = proc { navigate_to(:itens, it[:id]) }
+      button(class: "open-item-btn", onclick: callback) { "#{it[:nome] || '—'} (Abrir Item)" }
+    end
+
+    def render_item_detail
+      div do
+        h2 { "Item — Detalhes" } +
+        bind(:itens, '<div class="item-detail">') do |itens|
+          atual = itens[:atual] || {}
+          if atual[:id].nil?
+            "<p>Nenhum item selecionado.</p>"
+          else
+            <<~HTML
+              <h3>#{atual[:nome]}</h3>
+              <p>#{atual[:descricao]}</p>
+              <p><b>Quantidade:</b> #{atual[:quantidade]} #{atual[:unidade]}</p>
+              <p><b>Valor estimado:</b> R$ #{atual[:valor_estimado]}</p>
+              <div class='cotacoes'>Cotações: #{(atual[:cotacoes_ids]||[]).join(', ')}</div>
+              <div class='actions'>#{button_back_to_list(:itens)}</div>
+            HTML
+          end
+        end
+      end
+    end
+
+    # ---------- ATIVIDADES (accordions) ----------
+    def render_atividades_list
+      div do
+        h2 { "Atividades e Documentos (Accordions)" } +
+        bind(:atividades, '<div class="atividades-accordions">') do |atividades|
+          lista = (atividades[:lista] || [])
+          if lista.empty?
+            "<p>Nenhuma atividade criada.</p>"
+          else
+            lista.map do |a|
+              # accordion: título + badges de documentos
+              docs_badges = (a[:documentos] || []).map { |d| "<span class='badge'>#{d[:nome]}</span>" }.join(" ")
+              "<div class='accordion border p-2 mb-2'>
+                <div class='accordion-header'><b>#{a[:titulo] || '—'}</b> #{docs_badges}</div>
+                <div class='accordion-body'>
+                  <p>Tipo: #{a[:tipo_documento] || '-'}</p>
+                  <p>Responsável: #{a[:responsavel] || '-'}</p>
+                  <div class='actions'>
+                    #{button_open_atividade(a)}
+                    #{button_back_to_list(:atividades)}
+                  </div>
+                </div>
+              </div>"
+            end.join
+          end
+        end +
+        # botão para adicionar nova atividade (abre accordion em branco via callback)
+        div(class: "new-atividade") do
+          callback = proc {
+            new_id = "atividade_#{(Time.now.to_i)}"
+            new_activity = {
+              id: new_id,
+              titulo: "Nova Atividade #{new_id}",
+              tipo_documento: "docx",
+              descricao: "",
+              status: "rascunho",
+              pipeline: [],
+              responsavel: nil,
+              documentos: []
+            }
+            lista = @state[:atividades][:lista] || []
+            set_state(StatePath.new(:atividades)[:lista], lista + [new_activity])
+            # abre a atividade recém-criada
+            navigate_to(:atividades, new_id)
+          }
+          button(class: "btn-new-atividade", onclick: callback) { "Adicionar Atividade" }
+        end
+      end
+    end
+
+    def button_open_atividade(a)
+      callback = proc { navigate_to(:atividades, a[:id]) }
+      button(class: "open-atividade-btn", onclick: callback) { "Abrir Atividade" }
+    end
+
+    def render_atividade_detail
+      div do
+        h2 { "Atividade — Detalhes / Pipeline" } +
+        bind(:atividades, '<div class="atividade-detail">') do |atividades|
+          atual = atividades[:atual] || {}
+          if atual[:id].nil?
+            "<p>Nenhuma atividade selecionada.</p>"
+          else
+            pipeline_html = (atual[:pipeline] || []).map { |p|
+              checked = p[:concluido] ? "✅" : "⬜"
+              "<div class='pipeline-step'>#{checked} Etapa #{p[:etapa]} — #{p[:descricao]}</div>"
+            }.join
+            docs_html = (atual[:documentos] || []).map { |d| "<div class='doc-row'>#{d[:nome]} (#{d[:status]})</div>" }.join
+            <<~HTML
+              <h3>#{atual[:titulo]}</h3>
+              <p>Tipo: #{atual[:tipo_documento]}</p>
+              <p>Descrição: #{atual[:descricao]}</p>
+              <div class='pipeline'>#{pipeline_html}</div>
+              <div class='documents'>#{docs_html}</div>
+              <div class='actions'>
+                #{button_back_to_list(:atividades)}
+              </div>
+            HTML
+          end
+        end
+      end
+    end
+
+    # ---------- DOCUMENTOS ----------
+    def render_documentos_list
+      div do
+        h2 { "Documentos Escritoriais" } +
+        bind(:documentos, '<div class="documentos-list">') do |docs|
+          lista = (docs[:lista] || [])
+          if lista.empty?
+            "<p>Nenhum documento registrado.</p>"
+          else
+            lista.map do |d|
+              "<div class='doc-card border p-2 mb-2'>
+                #{button_open_documento(d)}
+                <div class='meta'>Status: #{d[:status] || '-'}</div>
+              </div>"
+            end.join
+          end
+        end +
+        div(class: "new-doc") do
+          callback = proc {
+            new_id = "doc_#{Time.now.to_i}"
+            new_doc = {
+              id: new_id,
+              atividade_id: nil,
+              nome: "Documento #{new_id}.docx",
+              tipo: "docx",
+              data_criacao: Time.now.to_s,
+              status: "rascunho",
+              assinaturas: [],
+              caminho: nil
+            }
+            lista = @state[:documentos][:lista] || []
+            set_state(StatePath.new(:documentos)[:lista], lista + [new_doc])
+            navigate_to(:documentos, new_id)
+          }
+          button(class: "btn-new-doc", onclick: callback) { "Novo Documento" }
+        end
+      end
+    end
+
+    def button_open_documento(d)
+      callback = proc { navigate_to(:documentos, d[:id]) }
+      button(class: "open-doc-btn", onclick: callback) { "#{d[:nome] || '—'} (Abrir Documento)" }
+    end
+
+    def render_documento_detail
+      div do
+        h2 { "Documento — Detalhes" } +
+        bind(:documentos, '<div class="documento-detail">') do |docs|
+          atual = docs[:atual] || {}
+          if atual[:id].nil?
+            "<p>Nenhum documento selecionado.</p>"
+          else
+            assinaturas = (atual[:assinaturas] || []).map { |s| "<div>#{s[:nome]} — #{s[:data]}</div>" }.join
+            <<~HTML
+              <h3>#{atual[:nome]}</h3>
+              <p><b>Tipo:</b> #{atual[:tipo]}</p>
+              <p><b>Data criação:</b> #{atual[:data_criacao]}</p>
+              <p><b>Status:</b> #{atual[:status]}</p>
+              <div class='assinaturas'>#{assinaturas}</div>
+              <div class='actions'>
+                #{button_back_to_list(:documentos)}
+              </div>
+            HTML
+          end
+        end
+      end
+    end
+
+    # ---------- WHATSAPP ----------
+    def render_whatsapp
+      div do
+        h2 { "WhatsApp Web" } +
+        bind(:whatsapp, '<div class="whatsapp-view">') do |w|
+          <<~HTML
+            <p>Contatos: #{(w[:contacts] || []).map{|c| c[:nome]}.join(', ')}</p>
+            <p>Mensagens no chat atual: #{(w[:messages] || []).map{|m| "#{m[:role]}: #{m[:text]}"}.join('<br>')}</p>
+            <p>Para enviar mensagem: use o campo abaixo e pressione Enviar.</p>
+          HTML
+        end
+      end
+    end
+    
+  end
+end
 
 
 # App rendering
