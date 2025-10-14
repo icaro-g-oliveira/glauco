@@ -1,6 +1,6 @@
 # GLAUCO RUBY
 
-swt com react like state managment framework for build desktop applications in ruby
+swt com react like state managment framework for build html desktop applications in ruby
 
 just require_relative glauco-framework.rb
 
