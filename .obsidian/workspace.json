@@ -1,0 +1,218 @@
+{
+  "main": {
+    "id": "32586e230d238ab8",
+    "type": "split",
+    "children": [
+      {
+        "id": "8f556a36017b63eb",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "2b6cddac5abd9f5a",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "README.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "README"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "da8e5015d14bf3e7",
+    "type": "split",
+    "children": [
+      {
+        "id": "91fa3f836da01496",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "407701c930877275",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "eb7681cadbc55eb9",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "84a60055c3f18036",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "3f3889759dc027ce",
+    "type": "split",
+    "children": [
+      {
+        "id": "8f0c09ba36b63f8a",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "3d9af2470db0245d",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "README.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for README"
+            }
+          },
+          {
+            "id": "3ed868e0df03e005",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "README.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from README"
+            }
+          },
+          {
+            "id": "117783db6d97e9ad",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "577391b0c6b9fd88",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "README.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of README"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "407701c930877275",
+  "lastOpenFiles": [
+    "api_automacoes - Copia.rb",
+    "dinamicas diretrizes - prompt.md",
+    "vendor/lmstudio-js/packages/lms-shared-types/dist/types/Zod.d.ts.map",
+    "vendor/lmstudio-js/packages/lms-shared-types/dist/types/Zod.d.ts",
+    "vendor/lmstudio-js/packages/lms-shared-types/dist/types/VirtualModelDefinition.d.ts.map",
+    "vendor/lmstudio-js/packages/lms-shared-types/dist/types/VirtualModelDefinition.d.ts",
+    "vendor/lmstudio-js/packages/lms-shared-types/dist/types/ToolNaming.d.ts.map",
+    "vendor/lmstudio-js/packages/lms-shared-types/dist/types/ToolNaming.d.ts",
+    "vendor/lmstudio-js/packages/lms-shared-types/dist/types/SerializedKVConfigSchematics.d.ts.map",
+    "vendor/lmstudio-js/packages/lms-shared-types/dist/types/SerializedKVConfigSchematics.d.ts",
+    "vendor/lmstudio-js/packages/lms-shared-types/dist/types/RuntimeExtension.d.ts.map",
+    "vendor/lmstudio-js/packages/lms-shared-types/dist/types/RuntimeExtension.d.ts",
+    "vendor/lmstudio-js/node_modules/terser/README.md",
+    "vendor/lmstudio-js/node_modules/strong-log-transformer/README.md",
+    "vendor/lmstudio-js/node_modules/strong-log-transformer/CONTRIBUTING.md",
+    "vendor/lmstudio-js/node_modules/strong-log-transformer/CHANGES.md",
+    "vendor/lmstudio-js/node_modules/tar/README.md",
+    "vendor/lmstudio-js/node_modules/z-schema/README.md",
+    "vendor/lmstudio-js/node_modules/source-map/README.md",
+    "vendor/lmstudio-js/node_modules/source-map/CHANGELOG.md",
+    "vendor/lmstudio-js/node_modules/randombytes/README.md",
+    "vendor/lmstudio-js/node_modules/promise-retry/README.md",
+    "vendor/lmstudio-js/node_modules/proc-log/README.md",
+    "vendor/lmstudio-js/node_modules/postcss-value-parser/README.md",
+    "vendor/lmstudio-js/node_modules/punycode/README.md",
+    "vendor/lmstudio-js/node_modules/rechoir/README.md",
+    "vendor/lmstudio-js/node_modules/read-cmd-shim/README.md",
+    "vendor/lmstudio-js/node_modules/retry/README.md",
+    "vendor/lmstudio-js/node_modules/retry/equation.gif",
+    "vendor/lmstudio-js/node_modules/readdirp/README.md",
+    "vendor/lmstudio-js/node_modules/resolve-cwd/node_modules/resolve-from/readme.md",
+    "vendor/lmstudio-js/node_modules/resolve-cwd/readme.md",
+    "vendor/lmstudio-js/node_modules/shx/README.md",
+    "vendor/lmstudio-js/node_modules/shx/CHANGELOG.md",
+    "vendor/lmstudio-js/node_modules/resolve/SECURITY.md",
+    "vendor/lmstudio-js/node_modules/reusify/README.md",
+    "vendor/lmstudio-js/node_modules/semver/README.md",
+    "vendor/lmstudio-js/node_modules/@jest/reporters/assets/jest_logo.png",
+    "vendor/lmstudio-js/node_modules/@npm/types/img/tool-tip.png",
+    "vendor/lmstudio-js/node_modules/concurrently/docs/demo.gif",
+    "vendor/lmstudio-js/node_modules/istanbul-reports/lib/html-spa/assets/sort-arrow-sprite.png",
+    "vendor/lmstudio-js/node_modules/istanbul-reports/lib/html/assets/sort-arrow-sprite.png",
+    "vendor/lmstudio-js/node_modules/istanbul-reports/lib/html/assets/favicon.png"
+  ]
+}

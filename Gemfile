@@ -1,18 +1,24 @@
-# Glauco react : React like swt.jar jruby mini framework for ruby isomorphic scripting software, electron future replacer and alternative
-# 1.0
-# MIT LICENSE
-# TODO implement state machine like state interface
-
+# Gemfile — JRuby-compatible version
 source "https://rubygems.org"
 
+platforms :jruby do
+  gem "json"
+  gem "fileutils"
+  gem "open3"
+  gem "securerandom"
+  gem "observer"
+  gem "pdf-reader"
+  gem "docx"
+  gem "roo"
+  gem "nodo", "~> 1.8"
 
+  gem "ruby_llm", ">= 1.6.0"
+  gem "faraday", "~> 2.9"
 
-gem "cgi", "~> 0.5.0"
+  gem "jruby-openssl"
+  gem "logger"
+end
 
-gem "nodo", "~> 1.8"
-
-gem "fast-mcp", "~> 1.5"
-
-gem "mcp", "~> 0.3.0"
-
-gem "observer", "~> 0.1.2"
+group :development, :test do
+  gem "pry"
+end
