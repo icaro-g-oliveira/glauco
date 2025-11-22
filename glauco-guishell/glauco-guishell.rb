@@ -57,7 +57,7 @@ require_relative '../glauco-automations/glauco-automotor.rb'
 puts "[GlaucoWebshell] 🚀 Definindo classe GlaucoWebshell..."
 # api_automacoes.rb
 
-class GlaucoWebshell < AutomationAgent
+class GlaucoGUIShell < AutomationAgent
   puts "[GlaucoWebshell] 🚀 Definindo método initialize..."
   attr_reader :shell, :browser, :display # Para acesso de leitura (objetos UI)
   attr_accessor :state, :visible          # Para acesso de leitura/escrita (@state e @visible)

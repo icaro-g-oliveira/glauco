@@ -2,9 +2,9 @@
 # Suite completa de testes para o Glauco Framework (BrowserAutoAgent + FS + Docs + OS)
 # Cada bloco imprime de forma analítica o resultado e simula cenários reais.
 
-require_relative './glauco-webshell.rb'
+require_relative './glauco-guishell.rb'
 
-agent = GlaucoWebshell.new
+agent = GlaucoGUIShell.new
 
 def banner(title)
   puts "\n" + "=" * 80

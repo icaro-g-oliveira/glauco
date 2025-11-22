@@ -91,7 +91,7 @@ module ApiAutomacoes
 
     def execute(url:)
       # 💥 IMPLEMENTAÇÃO DE abrir_url(url:)
-      @browser.setUrl(url)
+      browser.setUrl(url)
     end
   end
 
@@ -118,9 +118,9 @@ module ApiAutomacoes
       action = WebAction.new
       run_ui do
         begin
-          if @browser.isBackEnabled
-            @browser.back
-            @state[:last_action] = "voltar"
+          if browser.isBackEnabled
+            browser.back
+            state[:last_action] = "voltar"
             puts "[Navegação] ⬅️ Voltar no histórico"
             action.resolve("back")
           else
@@ -159,8 +159,8 @@ module ApiAutomacoes
       action = WebAction.new
       run_ui do
         begin
-          @browser.refresh
-          @state[:last_action] = "atualizar"
+          browser.refresh
+          state[:last_action] = "atualizar"
           puts "[Navegação] 🔄 Página recarregada"
           action.resolve("refreshed")
         rescue => e
@@ -202,6 +202,7 @@ module ApiAutomacoes
     def execute(selector:, valor:)
       # 💥 IMPLEMENTAÇÃO DE digitar (que é um wrapper de type)
       # Inlining a lógica de `type` e substituindo `value` por `valor`.
+      puts "[Input] ⌨️ digitando no #{selector.inspect} o valor #{valor.inspect}"
       action = WebAction.new
       run_ui do
         js = <<~JS
@@ -247,6 +248,8 @@ module ApiAutomacoes
     def execute(selector: nil)
       # 💥 IMPLEMENTAÇÃO DE pressionar_enter (que chama hotkey)
       key = 'Enter'
+
+      puts "[Hotkey] ⌨️ pressionar_enter no selector=#{selector.inspect}"
       action = WebAction.new
       run_ui do
         begin
@@ -280,7 +283,7 @@ module ApiAutomacoes
             JS
           end
 
-          result = @browser.evaluate(js)
+          result = browser.evaluate(js)
           puts "[Hotkey] selector=#{selector.inspect} key=#{key} → #{result.inspect}"
           action.resolve(result)
         rescue => e
@@ -753,8 +756,8 @@ module ApiAutomacoes
         JS
 
         begin
-          # Assumindo que `@browser` está disponível no contexto.
-          result = @browser.evaluate(js)
+          # Assumindo que `browser` está disponível no contexto.
+          result = browser.evaluate(js)
           puts "[Inspect] 📋 capturar_lista(#{selector.inspect}) → #{result.inspect}"
           action.resolve(result)
         rescue => e
@@ -800,7 +803,7 @@ module ApiAutomacoes
         JS
 
         begin
-          result = @browser.evaluate(js)
+          result = browser.evaluate(js)
           bool = !!result
           puts "[Inspect] ❓ existe(#{selector.inspect}) → #{bool}"
           action.resolve(bool)
@@ -844,7 +847,9 @@ module ApiAutomacoes
       # 💥 IMPLEMENTAÇÃO DE aguardar
       action = WebAction.new
 
-      Agente.run_in_thread do # Assumindo que Agente.run_in_thread está disponível
+      puts "[Aguardar] ⏳ Iniciando aguardo por #{selector.inspect} até #{timeout_ms}ms"
+
+      run_ui do # Assumindo que Agente.run_in_thread está disponível
         start_time = Time.now
         found = false
 
@@ -924,7 +929,7 @@ module ApiAutomacoes
         JS
 
         begin
-          json = @browser.evaluate(js)
+          json = browser.evaluate(js)
           links = JSON.parse(json.to_s) rescue []
           puts "[Inspect] 🔗 extrair_links(#{selector.inspect}) → #{links.length} links"
           action.resolve(links)
