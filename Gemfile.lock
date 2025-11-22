@@ -44,9 +44,6 @@ GEM
       hashery (~> 2.0)
       ruby-rc4
       ttfunk
-    pry (0.15.2)
-      coderay (~> 1.1)
-      method_source (~> 1.0)
     pry (0.15.2-java)
       coderay (~> 1.1)
       method_source (~> 1.0)
@@ -59,6 +56,9 @@ GEM
       nokogiri (~> 1)
       rubyzip (>= 3.0.0, < 4.0.0)
     ruby-rc4 (0.1.5)
+    rubyXL (3.4.35)
+      nokogiri (>= 1.10.8)
+      rubyzip (>= 3.2.2)
     ruby_llm (1.9.1)
       base64
       event_stream_parser (~> 1)
@@ -97,6 +97,7 @@ DEPENDENCIES
   pdf-reader
   pry
   roo
+  rubyXL (~> 3.4)
   ruby_llm (>= 1.6.0)
   securerandom
 

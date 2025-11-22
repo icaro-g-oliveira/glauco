@@ -7,3 +7,4 @@ just require_relative glauco-framework.rb
 Consult sample.rb for usage example
 
 cheers!
+

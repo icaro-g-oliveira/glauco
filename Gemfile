@@ -17,8 +17,10 @@ platforms :jruby do
 
   gem "jruby-openssl"
   gem "logger"
+  gem "rubyXL", "~> 3.4"
 end
 
 group :development, :test do
   gem "pry"
 end
+
