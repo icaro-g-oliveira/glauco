@@ -17,8 +17,7 @@ class AutomationAgent < GlaucoPlastic
   # ===========================================================
   # 🧠 Inicialização do LM Studio 
   # ===========================================================
-  def initialize(domain_specific_knowledge: nil,visible: true)
-
+  def initialize
     puts "[Glauco-Automator] 🚀 Configurando Glauco Framework..."
     
     require 'ruby_llm'
@@ -36,54 +35,10 @@ class AutomationAgent < GlaucoPlastic
     start_lmstudio
 
     puts "[Glauco-Automator] 🚀 Configurando LLM e API..."
-
-    setup_llm(domain_specific_knowledge: domain_specific_knowledge)
-
   end
-
+  
   def setup_llm(domain_specific_knowledge: nil)
-    require "ruby_llm"
-
-    # ===========================================================
-    # 1. CARREGAR MÓDULO
-    # ===========================================================
-
-    # ===========================================================
-    # 2. INICIALIZAR CHAT
-    # ===========================================================
-    RubyLLM.configure do |config|
-      config.openai_api_key  = "lmstudio-local"
-      config.openai_api_base = "http://localhost:1234/v1"
-    end
-
-    @chat = RubyLLM::Chat.new(
-      model: "qwen/qwen3-4b-2507",
-      provider: :openai,
-      assume_model_exists: true
-    ).with_temperature(0.0)
-
-
-    @chat
-  end
-
-  public
-  def interpretar(input_text)
-    puts "[Interpreter] input_text: #{input_text.inspect}"
-
-    wait_for_http_ready(SERVER_PORT)
-
-    prompt = <<~PROMPT
-      Pedido do usuário:
-      "#{input_text}"
-    PROMPT
-
-    #puts "[Interpreter] Enviando prompt ao LLM:\n#{prompt}"
-
-    result = ""
-    @chat.ask(prompt) { |chunk| result << chunk.content.to_s }
-    #puts "[Interpreter] Resposta bruta do LLM:\n#{result}"
-
-    result
+    super(system_config_instructions: File.join(AUTOMATOR_BASE_DIR, "system_config_instructions.md"), domain_specific_knowledge:  domain_specific_knowledge)
   end
 
 end

@@ -5,67 +5,7 @@ module ApiAutomacoes
   require 'forwardable'
   require 'ruby_llm'
 
-  class OpenUrlTool < RubyLLM::Tool
 
-    extend Forwardable # Use extend para métodos de classe
-
-    # 1. Defina o construtor para receber a instância do Agente
-    # Usamos keyword argument `agente_host:` para clareza
-    def initialize(agente_host:)
-        @agente_host = agente_host
-        super() # Chama o construtor pai (se houver)
-    end
-    
-    # 2. Delegue métodos do Agente Host para esta Tool
-    # Isso torna `run_ui`, `evaluate`, `shell`, `browser`, etc. acessíveis diretamente
-    # como se fossem métodos da OpenUrlTool.
-    def_delegators :@agente_host, :run_ui, :ensure_ui_alive, :evaluate
-    def_delegators :@agente_host, :shell, :browser, :display, :state, :visible
-
-    description "Abre uma URL específica no navegador web, controlando a visibilidade da interface. É o método fundamental para iniciar a navegação."
-    
-
-    # CORRIGIDO: Removido `:visible` (que tem default: true) do schema.
-    params type: "object",
-      properties: {
-        url: { type: "string", description: "A URL completa para abrir (ex: 'https://google.com')." }
-      },
-      required: %w[url],
-      additionalProperties: false,
-      strict: true
-
-    def execute(url:, visible: true)
-      action = WebAction.new
-      puts "[Navegação] 🌐 Abrindo URL: #{url.inspect} (visible=#{visible.inspect})"
-      run_ui do 
-        
-        ensure_ui_alive
-        shell.setVisible(true)
-        visible = true
-
-        # 🔸 Garante que a janela venha para frente
-        shell.forceActive
-        shell.setMinimized(false)
-        shell.setFocus
-
-        listener = Class.new(LocationAdapter) do
-          define_method(:changed) do |event|
-            puts "[Browser] ✅ Página carregada: #{event.location}"
-            action.resolve(event.location)
-          end
-        end.new
-
-        browser.addLocationListener(listener)
-        browser.setUrl(url)
-        state[:current_url] = url
-        state[:last_action] = "open_url"
-
-        while display.read_and_dispatch
-        end
-      end
-      action
-    end
-  end
 
   class AbrirUrlTool < RubyLLM::Tool
 
@@ -136,41 +76,6 @@ module ApiAutomacoes
     end
   end
 
-  class AtualizarTool < RubyLLM::Tool
-
-    extend Forwardable # Use extend para métodos de classe
-
-    # 1. Defina o construtor para receber a instância do Agente
-    # Usamos keyword argument `agente_host:` para clareza
-    def initialize(agente_host:)
-        @agente_host = agente_host
-        super() # Chama o construtor pai (se houver)
-    end
-    
-    # 2. Delegue métodos do Agente Host para esta Tool
-    # Isso torna `run_ui`, `evaluate`, `shell`, `browser`, etc. acessíveis diretamente
-    # como se fossem métodos da OpenUrlTool.
-    def_delegators :@agente_host, :run_ui, :ensure_ui_alive, :evaluate
-    def_delegators :@agente_host, :shell, :browser, :display, :state, :visible
-    description "Recarrega a página web atual."
-
-    def execute
-      # 💥 IMPLEMENTAÇÃO DE atualizar
-      action = WebAction.new
-      run_ui do
-        begin
-          browser.refresh
-          state[:last_action] = "atualizar"
-          puts "[Navegação] 🔄 Página recarregada"
-          action.resolve("refreshed")
-        rescue => e
-          puts "[Navegação] 💥 Erro em atualizar: #{e.class} - #{e.message}"
-          action.resolve(nil)
-        end
-      end
-      action
-    end
-  end
 
   # ====================================
   # 🔍 Input Web
@@ -211,7 +116,8 @@ module ApiAutomacoes
           else "element not found";
         JS
         begin
-          evaluate(js, "type:#{selector}")
+          result = evaluate(js, "type:#{selector}")
+          puts "[DigitarTool] result: #{result}"
           action.resolve("typed")
         rescue => e
           puts "[Type] 💥 Erro: #{e.class} - #{e.message}"
@@ -402,280 +308,6 @@ module ApiAutomacoes
     end
   end
 
-  class ClicarPrimeiroTool < RubyLLM::Tool
-
-    extend Forwardable # Use extend para métodos de classe
-
-    # 1. Defina o construtor para receber a instância do Agente
-    # Usamos keyword argument `agente_host:` para clareza
-    def initialize(agente_host:)
-        @agente_host = agente_host
-        super() # Chama o construtor pai (se houver)
-    end
-    
-    # 2. Delegue métodos do Agente Host para esta Tool
-    # Isso torna `run_ui`, `evaluate`, `shell`, `browser`, etc. acessíveis diretamente
-    # como se fossem métodos da OpenUrlTool.
-    def_delegators :@agente_host, :run_ui, :ensure_ui_alive, :evaluate
-    def_delegators :@agente_host, :shell, :browser, :display, :state, :visible
-    description "Clica no primeiro elemento encontrado que corresponde ao seletor CSS fornecido."
-
-    params do
-      string :selector, description: "Seletor CSS que pode corresponder a múltiplos elementos."
-    end
-
-    def execute(selector:)
-      # 💥 IMPLEMENTAÇÃO DE clicar_primeiro
-      action = WebAction.new
-      run_ui do
-        js = <<~JS
-          (function() {
-            var selector = #{selector.to_json};
-            var els = document.querySelectorAll(selector);
-            if (els.length > 0) {
-              els[0].click();
-              return "clicked_first";
-            } else {
-              return "no_elements";
-            }
-          })();
-        JS
-
-        begin
-          result = evaluate(js, "clicar_primeiro:#{selector}")
-          puts "[Click] 🖱️ clicar_primeiro(#{selector.inspect}) → #{result.inspect}"
-          action.resolve(result)
-        rescue => e
-          puts "[Click] 💥 Erro em clicar_primeiro: #{e.class} - #{e.message}"
-          action.resolve(nil)
-        end
-      end
-      action
-    end
-  end
-
-  class ClicarTextoTool < RubyLLM::Tool
-
-    extend Forwardable # Use extend para métodos de classe
-
-    # 1. Defina o construtor para receber a instância do Agente
-    # Usamos keyword argument `agente_host:` para clareza
-    def initialize(agente_host:)
-        @agente_host = agente_host
-        super() # Chama o construtor pai (se houver)
-    end
-    
-    # 2. Delegue métodos do Agente Host para esta Tool
-    # Isso torna `run_ui`, `evaluate`, `shell`, `browser`, etc. acessíveis diretamente
-    # como se fossem métodos da OpenUrlTool.
-    def_delegators :@agente_host, :run_ui, :ensure_ui_alive, :evaluate
-    def_delegators :@agente_host, :shell, :browser, :display, :state, :visible
-    description "Busca um elemento que contenha o texto especificado (case-insensitive) e clica nele. Útil para botões, links e outros elementos clicáveis."
-
-    params do
-      string :contem_texto, description: "O texto a ser buscado dentro de elementos clicáveis (ex: 'Fazer Login')."
-    end
-
-    def execute(contem_texto:)
-      # 💥 IMPLEMENTAÇÃO DE clicar_texto
-      action = WebAction.new
-      run_ui do
-        js = <<~JS
-          (function() {
-            var termo = #{contem_texto.to_s.downcase.to_json};
-
-            function normalizarTexto(el) {
-              var t = (el.innerText || el.textContent || "").toLowerCase();
-              return t.trim();
-            }
-
-            var seletores = [
-              'button', 'a', '[role="button"]', 'div', 'span',
-              'p', 'h1','h2','h3','h4','h5','h6', 'li'
-            ];
-
-            var lista = [];
-            seletores.forEach(function(sel) {
-              document.querySelectorAll(sel).forEach(function(el) {
-                lista.push(el);
-              });
-            });
-
-            for (var i = 0; i < lista.length; i++) {
-              var txt = normalizarTexto(lista[i]);
-              if (txt.indexOf(termo) !== -1) {
-                lista[i].click();
-                return "clicked";
-              }
-            }
-            return "not_found";
-          })();
-        JS
-
-        begin
-          result = evaluate(js, "clicar_texto:#{contem_texto}")
-          puts "[Click] 🔎 clicar_texto(#{contem_texto.inspect}) → #{result.inspect}"
-          action.resolve(result)
-        rescue => e
-          puts "[Click] 💥 Erro em clicar_texto: #{e.class} - #{e.message}"
-          action.resolve(nil)
-        end
-      end
-      action
-    end
-  end
-
-  # ====================================
-  # ⬇️ Rolagem Web
-  # ====================================
-
-  class ScrollTool < RubyLLM::Tool
-
-    extend Forwardable # Use extend para métodos de classe
-
-    # 1. Defina o construtor para receber a instância do Agente
-    # Usamos keyword argument `agente_host:` para clareza
-    def initialize(agente_host:)
-        @agente_host = agente_host
-        super() # Chama o construtor pai (se houver)
-    end
-    
-    # 2. Delegue métodos do Agente Host para esta Tool
-    # Isso torna `run_ui`, `evaluate`, `shell`, `browser`, etc. acessíveis diretamente
-    # como se fossem métodos da OpenUrlTool.
-    def_delegators :@agente_host, :run_ui, :ensure_ui_alive, :evaluate
-    def_delegators :@agente_host, :shell, :browser, :display, :state, :visible
-    description "Rola a janela da página verticalmente pela quantidade de pixels especificada. Positivo para baixo, negativo para cima."
-
-    params do
-      integer :quantidade_px, description: "A quantidade de pixels a rolar. Ex: 500 ou -500."
-    end
-
-    def execute(quantidade_px:)
-      # 💥 IMPLEMENTAÇÃO DE scroll
-      px = quantidade_px.to_i
-      action = WebAction.new
-      run_ui do
-        js = <<~JS
-          (function() {
-            window.scrollBy(0, #{px});
-            return "scrolled_#{px}";
-          })();
-        JS
-
-        begin
-          result = evaluate(js, "scroll:#{px}")
-          puts "[Scroll] 🖱️ scroll(#{px}) → #{result.inspect}"
-          action.resolve(result)
-        rescue => e
-          puts "[Scroll] 💥 Erro em scroll: #{e.class} - #{e.message}"
-          action.resolve(nil)
-        end
-      end
-      action
-    end
-  end
-
-  class ScrollParaBaixoTool < RubyLLM::Tool
-
-    extend Forwardable # Use extend para métodos de classe
-
-    # 1. Defina o construtor para receber a instância do Agente
-    # Usamos keyword argument `agente_host:` para clareza
-    def initialize(agente_host:)
-        @agente_host = agente_host
-        super() # Chama o construtor pai (se houver)
-    end
-    
-    # 2. Delegue métodos do Agente Host para esta Tool
-    # Isso torna `run_ui`, `evaluate`, `shell`, `browser`, etc. acessíveis diretamente
-    # como se fossem métodos da OpenUrlTool.
-    def_delegators :@agente_host, :run_ui, :ensure_ui_alive, :evaluate
-    def_delegators :@agente_host, :shell, :browser, :display, :state, :visible
-    description "Rola a página web para baixo pela quantidade de pixels especificada (padrão 600px)."
-
-    # CORRIGIDO: Removido `:quantidade_px` do schema (que tem default: 600).
-    params type: "object",
-      properties: {},
-      required: [],
-      additionalProperties: false,
-      strict: true
-
-    def execute(quantidade_px: 600)
-      # 💥 IMPLEMENTAÇÃO DE scroll_para_baixo (chama scroll)
-      px = quantidade_px.to_i
-      action = WebAction.new
-      run_ui do
-        js = <<~JS
-          (function() {
-            window.scrollBy(0, #{px});
-            return "scrolled_#{px}";
-          })();
-        JS
-
-        begin
-          result = evaluate(js, "scroll:#{px}")
-          puts "[Scroll] 🖱️ scroll(#{px}) → #{result.inspect}"
-          action.resolve(result)
-        rescue => e
-          puts "[Scroll] 💥 Erro em scroll: #{e.class} - #{e.message}"
-          action.resolve(nil)
-        end
-      end
-      action
-    end
-  end
-
-  class ScrollParaCimaTool < RubyLLM::Tool
-
-    extend Forwardable # Use extend para métodos de classe
-
-    # 1. Defina o construtor para receber a instância do Agente
-    # Usamos keyword argument `agente_host:` para clareza
-    def initialize(agente_host:)
-        @agente_host = agente_host
-        super() # Chama o construtor pai (se houver)
-    end
-    
-    # 2. Delegue métodos do Agente Host para esta Tool
-    # Isso torna `run_ui`, `evaluate`, `shell`, `browser`, etc. acessíveis diretamente
-    # como se fossem métodos da OpenUrlTool.
-    def_delegators :@agente_host, :run_ui, :ensure_ui_alive, :evaluate
-    def_delegators :@agente_host, :shell, :browser, :display, :state, :visible
-    description "Rola a página web para cima pela quantidade de pixels especificada (padrão 600px)."
-
-    # CORRIGIDO: Removido `:quantidade_px` do schema (que tem default: 600).
-    params type: "object",
-      properties: {},
-      required: [],
-      additionalProperties: false,
-      strict: true
-
-    def execute(quantidade_px: 600)
-      # 💥 IMPLEMENTAÇÃO DE scroll_para_cima (chama scroll com negativo)
-      px = -quantidade_px.to_i
-      action = WebAction.new
-      run_ui do
-        js = <<~JS
-          (function() {
-            window.scrollBy(0, #{px});
-            return "scrolled_#{px}";
-          })();
-        JS
-
-        begin
-          result = evaluate(js, "scroll:#{px}")
-          puts "[Scroll] 🖱️ scroll(#{px}) → #{result.inspect}"
-          action.resolve(result)
-        rescue => e
-          puts "[Scroll] 💥 Erro em scroll: #{e.class} - #{e.message}"
-          action.resolve(nil)
-        end
-      end
-      action
-    end
-  end
-
   # ====================================
   # 📋 Inspeção Web
   # ====================================
@@ -696,13 +328,13 @@ module ApiAutomacoes
     # como se fossem métodos da OpenUrlTool.
     def_delegators :@agente_host, :run_ui, :ensure_ui_alive, :evaluate
     def_delegators :@agente_host, :shell, :browser, :display, :state, :visible
-    description "Retorna o código HTML completo da página web atual (`document.documentElement.outerHTML`)."
+    description "Retorna o código HTML completo da página web atual (`document.document.body.outerHTML`)."
 
     def execute
       # 💥 IMPLEMENTAÇÃO DE ler_html
       action = WebAction.new
       run_ui do
-        js = "document.documentElement.outerHTML;"
+        js = "return document.body.outerHTML;"
         begin
           html = evaluate(js, "ler_html")
           puts "[Inspect] 📄 ler_html → tamanho=#{html.to_s.length} chars"
@@ -716,105 +348,7 @@ module ApiAutomacoes
     end
   end
 
-  class CapturarListaTool < RubyLLM::Tool
 
-    extend Forwardable # Use extend para métodos de classe
-
-    # 1. Defina o construtor para receber a instância do Agente
-    # Usamos keyword argument `agente_host:` para clareza
-    def initialize(agente_host:)
-        @agente_host = agente_host
-        super() # Chama o construtor pai (se houver)
-    end
-    
-    # 2. Delegue métodos do Agente Host para esta Tool
-    # Isso torna `run_ui`, `evaluate`, `shell`, `browser`, etc. acessíveis diretamente
-    # como se fossem métodos da OpenUrlTool.
-    def_delegators :@agente_host, :run_ui, :ensure_ui_alive, :evaluate
-    def_delegators :@agente_host, :shell, :browser, :display, :state, :visible
-    description "Captura o texto (innerText/textContent) de todos os elementos correspondentes ao seletor CSS e retorna como uma lista de strings."
-
-    params do
-      string :selector, description: "Seletor CSS para os elementos a serem capturados (ex: '.list-item')."
-    end
-
-    def execute(selector:)
-      # 💥 IMPLEMENTAÇÃO DE capturar_lista
-      action = WebAction.new
-      run_ui do
-        js = <<~JS
-          (function() {
-            var selector = #{selector.to_json};
-            var els = document.querySelectorAll(selector);
-            var res = [];
-            for (var i = 0; i < els.length; i++) {
-              var t = (els[i].innerText || els[i].textContent || "").trim();
-              res.push(t);
-            }
-            return res;
-          })();
-        JS
-
-        begin
-          # Assumindo que `browser` está disponível no contexto.
-          result = browser.evaluate(js)
-          puts "[Inspect] 📋 capturar_lista(#{selector.inspect}) → #{result.inspect}"
-          action.resolve(result)
-        rescue => e
-          puts "[Inspect] 💥 Erro em capturar_lista: #{e.class} - #{e.message}"
-          action.resolve(nil)
-        end
-      end
-      action
-    end
-  end
-
-  class ExisteTool < RubyLLM::Tool
-
-    extend Forwardable # Use extend para métodos de classe
-
-    # 1. Defina o construtor para receber a instância do Agente
-    # Usamos keyword argument `agente_host:` para clareza
-    def initialize(agente_host:)
-        @agente_host = agente_host
-        super() # Chama o construtor pai (se houver)
-    end
-    
-    # 2. Delegue métodos do Agente Host para esta Tool
-    # Isso torna `run_ui`, `evaluate`, `shell`, `browser`, etc. acessíveis diretamente
-    # como se fossem métodos da OpenUrlTool.
-    def_delegators :@agente_host, :run_ui, :ensure_ui_alive, :evaluate
-    def_delegators :@agente_host, :shell, :browser, :display, :state, :visible
-    description "Verifica se um elemento correspondente ao seletor CSS existe na página. Retorna `true` ou `false`."
-
-    params do
-      string :selector, description: "Seletor CSS do elemento a ser verificado (ex: '#modal')."
-    end
-
-    def execute(selector:)
-      # 💥 IMPLEMENTAÇÃO DE existe
-      action = WebAction.new
-      run_ui do
-        js = <<~JS
-          (function(){
-            var selector = #{selector.to_json};
-            return !!document.querySelector(selector);
-          })();
-        JS
-
-        begin
-          result = browser.evaluate(js)
-          bool = !!result
-          puts "[Inspect] ❓ existe(#{selector.inspect}) → #{bool}"
-          action.resolve(bool)
-        rescue => e
-          puts "[Inspect] 💥 Erro em existe: #{e.class} - #{e.message}"
-          action.resolve(false)
-        end
-      end
-      action
-    end
-  end
 
   class AguardarTool < RubyLLM::Tool
 
@@ -883,294 +417,6 @@ module ApiAutomacoes
     end
   end
 
-  class ExtrairLinksTool < RubyLLM::Tool
-
-    extend Forwardable # Use extend para métodos de classe
-
-    # 1. Defina o construtor para receber a instância do Agente
-    # Usamos keyword argument `agente_host:` para clareza
-    def initialize(agente_host:)
-        @agente_host = agente_host
-        super() # Chama o construtor pai (se houver)
-    end
-    
-    # 2. Delegue métodos do Agente Host para esta Tool
-    # Isso torna `run_ui`, `evaluate`, `shell`, `browser`, etc. acessíveis diretamente
-    # como se fossem métodos da OpenUrlTool.
-    def_delegators :@agente_host, :run_ui, :ensure_ui_alive, :evaluate
-    def_delegators :@agente_host, :shell, :browser, :display, :state, :visible
-    description "Extrai a URL (href) e o texto de todos os elementos de link que correspondem ao seletor CSS."
-
-    # CORRIGIDO: Removido `:selector` do schema (que tem default: "a").
-    params type: "object",
-      properties: {},
-      required: [],
-      additionalProperties: false,
-      strict: true
-
-    def execute(selector: "a")
-      # 💥 IMPLEMENTAÇÃO DE extrair_links
-      action = WebAction.new
-      run_ui do
-        js = <<~JS
-          (function() {
-            var selector = #{selector.to_json};
-            var els = document.querySelectorAll(selector);
-            var res = [];
-            for (var i = 0; i < els.length; i++) {
-              var el = els[i];
-              res.push({
-                href: el.href || el.getAttribute('href') || null,
-                text: (el.innerText || el.textContent || "").trim()
-              });
-            }
-            return JSON.stringify(res);
-          })();
-        JS
-
-        begin
-          json = browser.evaluate(js)
-          links = JSON.parse(json.to_s) rescue []
-          puts "[Inspect] 🔗 extrair_links(#{selector.inspect}) → #{links.length} links"
-          action.resolve(links)
-        rescue => e
-          puts "[Inspect] 💥 Erro em extrair_links: #{e.class} - #{e.message}"
-          action.resolve([])
-        end
-      end
-      action
-    end
-  end
-
-  # ====================================
-  # ▶️ Automação YouTube
-  # ====================================
-
-  class AbrirPrimeiroVideoTool < RubyLLM::Tool
-
-    extend Forwardable # Use extend para métodos de classe
-
-    # 1. Defina o construtor para receber a instância do Agente
-    # Usamos keyword argument `agente_host:` para clareza
-    def initialize(agente_host:)
-        @agente_host = agente_host
-        super() # Chama o construtor pai (se houver)
-    end
-    
-    # 2. Delegue métodos do Agente Host para esta Tool
-    # Isso torna `run_ui`, `evaluate`, `shell`, `browser`, etc. acessíveis diretamente
-    # como se fossem métodos da OpenUrlTool.
-    def_delegators :@agente_host, :run_ui, :ensure_ui_alive, :evaluate
-    def_delegators :@agente_host, :shell, :browser, :display, :state, :visible
-    description "Clica no primeiro elemento de vídeo encontrado em páginas de busca ou feed do YouTube."
-
-    def execute
-      # 💥 IMPLEMENTAÇÃO DE abrir_primeiro_video
-      action = WebAction.new
-      run_ui do
-        js = <<~JS
-          (function() {
-            function clickFirst(sel) {
-              var el = document.querySelector(sel);
-              if (el) { el.click(); return sel; }
-              return null;
-            }
-
-            var selectors = [
-              "ytd-video-renderer a#thumbnail",
-              "ytd-rich-item-renderer ytd-rich-grid-media a#thumbnail",
-              "ytd-rich-grid-media a#thumbnail",
-              "a#video-title",
-              "#video-title"
-            ];
-
-            for (var i = 0; i < selectors.length; i++) {
-              var used = clickFirst(selectors[i]);
-              if (used) return "clicked:" + used;
-            }
-            return "not_found";
-          })();
-        JS
-
-        begin
-          result = evaluate(js, "abrir_primeiro_video")
-          puts "[YouTube] ▶️ abrir_primeiro_video → #{result.inspect}"
-          action.resolve(result)
-        rescue => e
-          puts "[YouTube] 💥 Erro em abrir_primeiro_video: #{e.class} - #{e.message}"
-          action.resolve(nil)
-        end
-      end
-      action
-    end
-  end
-
-  class AbrirCanalTool < RubyLLM::Tool
-
-    extend Forwardable # Use extend para métodos de classe
-
-    # 1. Defina o construtor para receber a instância do Agente
-    # Usamos keyword argument `agente_host:` para clareza
-    def initialize(agente_host:)
-        @agente_host = agente_host
-        super() # Chama o construtor pai (se houver)
-    end
-    
-    # 2. Delegue métodos do Agente Host para esta Tool
-    # Isso torna `run_ui`, `evaluate`, `shell`, `browser`, etc. acessíveis diretamente
-    # como se fossem métodos da OpenUrlTool.
-    def_delegators :@agente_host, :run_ui, :ensure_ui_alive, :evaluate
-    def_delegators :@agente_host, :shell, :browser, :display, :state, :visible
-    description "Clica no link do canal do criador na página de exibição de um vídeo do YouTube."
-
-    def execute
-      # 💥 IMPLEMENTAÇÃO DE abrir_canal
-      action = WebAction.new
-      run_ui do
-        js = <<~JS
-          (function() {
-            var el = document.querySelector("ytd-channel-name a");
-            if (!el) {
-              el = document.querySelector("#channel-name a");
-            }
-            if (el) {
-              el.click();
-              return "clicked_channel";
-            }
-            return "not_found";
-          })();
-        JS
-
-        begin
-          result = evaluate(js, "abrir_canal")
-          puts "[YouTube] 🧭 abrir_canal → #{result.inspect}"
-          action.resolve(result)
-        rescue => e
-          puts "[YouTube] 💥 Erro em abrir_canal: #{e.class} - #{e.message}"
-          action.resolve(nil)
-        end
-      end
-      action
-    end
-  end
-
-  class AbrirResultadoPesquisaTextoTool < RubyLLM::Tool
-
-    extend Forwardable # Use extend para métodos de classe
-
-    # 1. Defina o construtor para receber a instância do Agente
-    # Usamos keyword argument `agente_host:` para clareza
-    def initialize(agente_host:)
-        @agente_host = agente_host
-        super() # Chama o construtor pai (se houver)
-    end
-    
-    # 2. Delegue métodos do Agente Host para esta Tool
-    # Isso torna `run_ui`, `evaluate`, `shell`, `browser`, etc. acessíveis diretamente
-    # como se fossem métodos da OpenUrlTool.
-    def_delegators :@agente_host, :run_ui, :ensure_ui_alive, :evaluate
-    def_delegators :@agente_host, :shell, :browser, :display, :state, :visible
-    description "Clica em um resultado de pesquisa de vídeo do YouTube cujo título contenha o texto especificado (case-insensitive)."
-
-    params do
-      string :texto, description: "O texto contido no título ou na informação principal do vídeo a ser clicado."
-    end
-
-    def execute(texto:)
-      # 💥 IMPLEMENTAÇÃO DE abrir_resultado_pesquisa_texto
-      action = WebAction.new
-      run_ui do
-        js = <<~JS
-          (function() {
-            var termo = #{texto.to_s.downcase.to_json};
-
-            function match(el) {
-              var t = (el.innerText || el.textContent || "").toLowerCase();
-              return t.indexOf(termo) !== -1;
-            }
-
-            var seletores = [
-              "ytd-video-renderer a#video-title",
-              "a#video-title",
-              "yt-formatted-string.ytd-video-renderer",
-              "yt-formatted-string.ytd-video-primary-info-renderer"
-            ];
-
-            for (var i = 0; i < seletores.length; i++) {
-              var els = document.querySelectorAll(seletores[i]);
-              for (var j = 0; j < els.length; j++) {
-                if (match(els[j])) {
-                  els[j].click();
-                  return "clicked:" + seletores[i];
-                }
-              }
-            }
-            return "not_found";
-          })();
-        JS
-
-        begin
-          result = evaluate(js, "abrir_resultado_pesquisa_texto:#{texto}")
-          puts "[YouTube] 🔎 abrir_resultado_pesquisa_texto(#{texto.inspect}) → #{result.inspect}"
-          action.resolve(result)
-        rescue => e
-          puts "[YouTube] 💥 Erro em abrir_resultado_pesquisa_texto: #{e.class} - #{e.message}"
-          action.resolve(nil)
-        end
-      end
-      action
-    end
-  end
-
-  class RolarResultadosTool < RubyLLM::Tool
-
-    extend Forwardable # Use extend para métodos de classe
-
-    # 1. Defina o construtor para receber a instância do Agente
-    # Usamos keyword argument `agente_host:` para clareza
-    def initialize(agente_host:)
-        @agente_host = agente_host
-        super() # Chama o construtor pai (se houver)
-    end
-    
-    # 2. Delegue métodos do Agente Host para esta Tool
-    # Isso torna `run_ui`, `evaluate`, `shell`, `browser`, etc. acessíveis diretamente
-    # como se fossem métodos da OpenUrlTool.
-    def_delegators :@agente_host, :run_ui, :ensure_ui_alive, :evaluate
-    def_delegators :@agente_host, :shell, :browser, :display, :state, :visible
-    description "Rola os resultados de uma página de busca (e.g., YouTube) verticalmente pela quantidade de pixels especificada (padrão 900px)."
-
-    # CORRIGIDO: Removido `:quantidade_px` do schema (que tem default: 900).
-    params type: "object",
-      properties: {},
-      required: [],
-      additionalProperties: false,
-      strict: true
-
-    def execute(quantidade_px: 900)
-      # 💥 IMPLEMENTAÇÃO DE rolar_resultados (chama scroll)
-      px = quantidade_px.to_i
-      action = WebAction.new
-      run_ui do
-        js = <<~JS
-          (function() {
-            window.scrollBy(0, #{px});
-            return "scrolled_#{px}";
-          })();
-        JS
-
-        begin
-          result = evaluate(js, "scroll:#{px}")
-          puts "[Scroll] 🖱️ scroll(#{px}) → #{result.inspect}"
-          action.resolve(result)
-        rescue => e
-          puts "[Scroll] 💥 Erro em scroll: #{e.class} - #{e.message}"
-          action.resolve(nil)
-        end
-      end
-      action
-    end
-  end
 
   # ====================================
   # 🗃️ Sistema de Arquivos (FS)
@@ -1826,6 +1072,109 @@ module ApiAutomacoes
     end
   end
 
+  class FsMetadataTool < RubyLLM::Tool
+
+    extend Forwardable
+
+    def initialize(agente_host:)
+      @agente_host = agente_host
+      super()
+    end
+    
+    def_delegators :@agente_host, :run_ui, :ensure_ui_alive, :evaluate
+    def_delegators :@agente_host, :shell, :browser, :display, :state, :visible
+    description "Retorna metadados importantes de um arquivo (tamanho, data de modificação, etc.)."
+
+    params do
+      string :path, description: "O caminho para o arquivo."
+    end
+
+    def execute(path:)
+      puts "[FS] 🔍 Buscando metadados para: #{path.inspect}"
+      begin
+        stat = File.stat(path)
+        
+        # Helper para formatar o tamanho
+        readable_size = begin
+          units = %w(B KB MB GB TB)
+          i = (Math.log(stat.size) / Math.log(1024)).to_i
+          "%.2f %s" % [stat.size / (1024.0 ** i), units[i]]
+        rescue
+          "N/A"
+        end
+
+        metadata = {
+          path: path,
+          existe: true,
+          tipo: File.directory?(path) ? "diretorio" : "arquivo",
+          tamanho_bytes: stat.size,
+          tamanho_legivel: readable_size,
+          data_modificacao: stat.mtime.to_s, # Time object to String
+          data_criacao: stat.ctime.to_s
+        }
+        puts "[FS] ✔️ Metadados encontrados"
+        metadata
+      rescue Errno::ENOENT
+        puts "[FS] ⚠️ Arquivo não encontrado."
+        { path: path, existe: false, erro: "Arquivo ou diretório não encontrado." }
+      rescue => e
+        puts "[FS] ❌ Erro em FsMetadataTool: #{e.message}"
+        { path: path, existe: false, erro: "Erro ao acessar metadados: #{e.message}" }
+      end
+    end
+  end
+
+  class FsCompararTool < RubyLLM::Tool
+
+    extend Forwardable
+
+    def initialize(agente_host:)
+      @agente_host = agente_host
+      super()
+    end
+    
+    def_delegators :@agente_host, :run_ui, :ensure_ui_alive, :evaluate
+    def_delegators :@agente_host, :shell, :browser, :display, :state, :visible
+    description "Compara o conteúdo de dois arquivos e retorna se são idênticos."
+
+    params do
+      string :path_a, description: "Caminho para o primeiro arquivo (A)."
+      string :path_b, description: "Caminho para o segundo arquivo (B)."
+    end
+
+    def execute(path_a:, path_b:)
+      puts "[FS] 🔀 Comparando A: #{path_a.inspect} com B: #{path_b.inspect}"
+      
+      # Verifica se ambos os caminhos existem
+      unless File.exist?(path_a) && File.exist?(path_b)
+        return { identicos: false, erro: "Pelo menos um dos arquivos não existe." }
+      end
+      
+      # 1. Comparação de tamanho (otimização)
+      if File.size(path_a) != File.size(path_b)
+        puts "[FS] ❌ Diferentes: Tamanhos não conferem."
+        return { identicos: false, motivo: "Tamanhos diferentes" }
+      end
+
+      # 2. Comparação de conteúdo
+      begin
+        content_a = File.read(path_a)
+        content_b = File.read(path_b)
+
+        if content_a == content_b
+          puts "[FS] ✔️ Arquivos idênticos."
+          return { identicos: true, motivo: "Conteúdo e tamanho idênticos" }
+        else
+          puts "[FS] ❌ Diferentes: Conteúdo diferente (mesmo tamanho)."
+          return { identicos: false, motivo: "Conteúdo diferente" }
+        end
+      rescue => e
+        puts "[FS] ❌ Erro ao ler conteúdo: #{e.message}"
+        return { identicos: false, erro: "Erro de leitura de arquivo: #{e.message}" }
+      end
+    end
+  end
+
   # ====================================
   # 📊 Manipulação de Planilhas/Documentos
   # ====================================
@@ -1897,6 +1246,7 @@ module ApiAutomacoes
       return "NotImplemented"
     end
   end
+  
 
 
   # ====================================

@@ -67,20 +67,61 @@ class GlaucoGUIShell < AutomationAgent
 
   def initialize
     puts "[GlaucoWebshell] 🚀 Inicializando GlaucoWebshell com UI..."
-    super( 
+    # start_ui_thread
+    super
+    setup_llm
+  end
+
+  def setup_llm
+    @chat = super( 
       domain_specific_knowledge: File.expand_path('dinamicas diretrizes - prompt.md', __dir__), 
-      visible: false
-      )
+    )
 
-    tool_classes = ApiAutomacoes.constants.map do |const_name|
+    puts "super setup_llm:#{@chat}"
+
+    carregar_api_de_automacoes
+  end
+  
+  def carregar_api_de_automacoes
+    begin 
+      tool_classes = ApiAutomacoes.constants.map do |const_name|
       tool_class = ApiAutomacoes.const_get(const_name)
-      if tool_class.is_a?(Class) && tool_class.ancestors.include?(RubyLLM::Tool)
-        # 🔑 PASSO CRÍTICO: Inicialize a ferramenta passando a instância do agente (self)
-        tool_class.new(agente_host: self) 
-      end
-    end.compact
+        if tool_class.is_a?(Class) && tool_class.ancestors.include?(RubyLLM::Tool)
+          # 🔑 PASSO CRÍTICO: Inicialize a ferramenta passando a instância do agente (self)
+          tool_class.new(agente_host: self) 
+        end
+      end.compact
 
-    @chat.with_tools(*tool_classes)
+      @chat.with_tools(*tool_classes)
+      true
+    rescue
+      puts "Falhou"
+      false
+    end
+  end
+
+  public
+  def interpretar(input_text)
+    case input_text
+    when "carregar base de conhecimento"
+      carregar_base_de_conhecimento 
+    when "carregar api de automações"
+      carregar_api_de_automacoes
+    
+    else
+      puts "[Interpreter] input_text: #{input_text.inspect}"
+      
+      wait_for_http_ready(SERVER_PORT)
+      
+      result = ""
+      run_ui do 
+        puts "@browser #{browser}"
+        @chat.ask(super(input_text)) { |chunk| result << chunk.content.to_s }
+      end
+      #puts "[Interpreter] Resposta bruta do LLM:\n#{result}"
+
+      result
+    end
   end
 
   def start_ui_thread
@@ -148,7 +189,11 @@ class GlaucoGUIShell < AutomationAgent
   end
 
   def evaluate(js, label = nil)
-    run_async { @browser.evaluate(js) }
+    run_ui { 
+      result = @browser.evaluate(js)
+      # puts "[#{label} - Evaluate]: #{result}"
+      result
+    }
   end
 
   def run_async(&block)

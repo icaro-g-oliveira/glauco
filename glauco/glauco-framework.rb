@@ -103,7 +103,7 @@ class GlaucoPlastic
   
   LMS_EXE_PATH     = File.expand_path(File.join(Dir.home, ".lmstudio", "bin", "lms.exe"))
   MODEL_PATH       = File.expand_path("vendor/Qwen3-4B-Instruct-2507-Q4_K_M.gguf", __dir__)
-  MODEL_IDENTIFIER = "qwen/qwen3-4b-2507"
+  MODEL_IDENTIFIER = "qwen3"
   SERVER_PORT      = 1234
 
   puts "[Glauco] 🚀 Inicializando Glauco Framework..."
@@ -111,7 +111,7 @@ class GlaucoPlastic
   # ===========================================================
   # 🧠 Inicialização do LM Studio 
   # ===========================================================
-  def initialize(system_config_instructions:, domain_specific_knowledge: nil)
+  def initialize
 
     puts "[Glauco] 🚀 Configurando Glauco Framework..."
     
@@ -120,16 +120,13 @@ class GlaucoPlastic
     puts "[Glauco] ⚙️ Configuração inicial..."
 
     start_lmstudio
-    setup_llm(system_config_instructions: system_config_instructions, domain_specific_knowledge: domain_specific_knowledge)
 
   end
 
   private
   def start_lmstudio
     puts "[LMStudio] 🚀 Iniciando LM Studio..."
-    unless File.exist?(LMS_EXE_PATH)
-      raise "LM Studio não encontrado em #{LMS_EXE_PATH}. Por favor, instale-o primeiro."
-    end
+    
     $lm_mutex ||= Mutex.new
     $lmstudio_started ||= false
     @lmstudio_ready = false
@@ -148,6 +145,8 @@ class GlaucoPlastic
               FileUtils.cp_r(template_src, lmstudio_home)
             else
               puts "[LMStudio] ⚙️ Ambiente LM Studio já existente."
+              system(LMS_EXE_PATH, "ls")
+              sleep 2
             end
 
             puts "[LMStudio] 🚀 Importando modelo..."
@@ -156,7 +155,7 @@ class GlaucoPlastic
             puts "[LMStudio] 🧩 Carregando modelo..."
             gpu_mode = ENV["LMS_GPU_MODE"] || "max" # padrão configurável
             system(LMS_EXE_PATH,
-              "load", MODEL_IDENTIFIER,
+              "load", "qwen/qwen3-4b-2507",
               "--gpu", gpu_mode,
               "--identifier", MODEL_IDENTIFIER,
               "--context-length", "8192",
@@ -165,10 +164,11 @@ class GlaucoPlastic
 
              # realizar carregamento de modelo de embeddings Qwen3-Embedding-4B-Q4_K_M.gguf
             system(LMS_EXE_PATH, "import", File.expand_path("vendor/Qwen3-Embedding-4B-Q4_K_M.gguf", __dir__), "-y", "--hard-link")
+            sleep 1
             system(LMS_EXE_PATH,
-              "load", "qwen/qwen3-embedding-4b-q4_k_m",
+              "load", "Qwen/Qwen3-Embedding-4B-GGUF/Qwen3-Embedding-4B-Q4_K_M.gguf",
               "--gpu", gpu_mode,
-              "--identifier", "qwen/qwen3-embedding-4b-q4_k_m",
+              "--identifier", "qwen3-embedding",
               "--context-length", "8192",
               "-y"
             )
@@ -226,22 +226,31 @@ class GlaucoPlastic
       
     @chat.with_temperature(0.0)
 
-    config_path = File.expand_path(system_config_instructions)
-    puts "[LLM] 🚀 Carregando instruções... #{config_path}"
+    @config_path = File.expand_path(system_config_instructions)
+    puts "[LLM] 🚀 Carregando instruções... #{@config_path}"
 
+    @domain_specific_knowledge = domain_specific_knowledge
     # return if File.exist?("rag_index.json")  # já existe, não refaz
+    carregar_base_de_conhecimento
+    
+    puts "[LLM] ✅ Configuração do LLM concluída."
+    
+    @chat
+  end
 
-    full_text = File.read(domain_specific_knowledge, encoding: "UTF-8")
-    chunks = full_text.split(/^##\s+/).map(&:strip).reject(&:empty?)
+  def carregar_base_de_conhecimento
+
+    full_text = File.read(@domain_specific_knowledge, encoding: "UTF-8")
+    chunks = full_text.split(/^###\s+/).map(&:strip).reject(&:empty?)
 
     @rag_index = RagIndex.build(chunks)
     RagIndex.save(@rag_index)
 
-    @chat.with_instructions(File.read(config_path, encoding: "UTF-8"))
+    puts "[LLM] 🚀 Carregando instruções de configuração do sistema... #{@config_path} "
 
-    puts "[LLM] ✅ Configuração do LLM concluída."
+    @chat.with_instructions(File.read(@config_path, encoding: "UTF-8"), replace: true)
+
     
-    @chat
   end
 
   def wait_for_http_ready(port, host: "localhost", timeout: 30)
@@ -274,13 +283,9 @@ class GlaucoPlastic
       ## Pedido do usuário:
       "#{input_text}"
 
-      Gere apenas Ruby válido para executar a automação.
     PROMPT
 
-    response = @chat.ask(prompt)
-    code = response.content.to_s
-
-    code.strip.gsub(/```ruby|```/,"").strip
+    prompt
   end
 
 
